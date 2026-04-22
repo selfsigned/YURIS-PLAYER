@@ -1,0 +1,3 @@
+[submodule "libyuris/existing_projects/RxYuris"]
+	path = libyuris/existing_projects/RxYuris
+	url = https://github.com/ZQF-ReVN/RxYuris

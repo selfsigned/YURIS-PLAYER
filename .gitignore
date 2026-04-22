@@ -1,0 +1,7 @@
+#libyuris
+libyuris/target
+libyuris/tests/fixtures/
+
+#yuris-player
+assets/*
+build/

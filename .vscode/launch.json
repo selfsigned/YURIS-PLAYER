@@ -1,0 +1,59 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug v255",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/yuris-player",
+      "args": [
+        "-d",
+        "${workspaceFolder}/libyuris/existing_projects/yuris_decompiler/example-files/v255.ypf"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "preLaunchTask": "meson: compile (debug)",
+      "externalConsole": false
+    },
+    {
+      "name": "Debug v494",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/yuris-player",
+      "args": [
+        "-d",
+        "${workspaceFolder}/libyuris/existing_projects/yuris_decompiler/example-files/v494.ypf"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "preLaunchTask": "meson: compile (debug)",
+      "externalConsole": false
+    },
+    {
+      "name": "Debug game",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/yuris-player",
+      "args": [
+        "-d",
+        "${workspaceFolder}/assets/"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "preLaunchTask": "meson: compile (debug)",
+      "externalConsole": false
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug both",
+      "configurations": ["Debug v255", "Debug v494"]
+    }
+  ]
+}
