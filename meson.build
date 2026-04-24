@@ -32,8 +32,14 @@ inc = include_directories('include')
 
 src_files = files(
   'src/yurisplayer.c',
-  'src/archive.c'
+  'src/archive.c',
+  'src/debug.c',
+  'src/script_reader.c'
 )
+
+if get_option('buildtype') in ['debug', 'debugoptimized']
+    add_project_arguments('-DYURIS_DEBUG', language: 'c')
+endif
 
 executable('yuris-player',
   src_files,

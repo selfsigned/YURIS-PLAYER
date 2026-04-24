@@ -19,7 +19,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <string.h>
 #include <errno.h>
-#include <SDL2/SDL.h>
 // posix stuff, no winblows for now
 #include <dirent.h>
 #include <sys/types.h>
@@ -29,8 +28,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "libyuris.h"
 #include "archive.h"
+#include "script_reader.h"
 
-// Main stuff
+#ifdef YURIS_DEBUG
+#include "debug.h"
+#endif
+
+// Config / Argparse //
 
 struct config config = {
     .debug = false
@@ -39,9 +43,13 @@ struct config config = {
 void show_help() {
     printf("Usage: yuris-player [options] <script.ypf OR game/pac>\n");
     printf("Options:\n");
-    printf("  -h, --help       Show this help message\n");
+    printf("  -h, --help         Show this help message\n");
     printf("  -t, --target PATH  Set the game target, either a script file or game asset directory (default: current directory)\n");
-    printf("  -d, --debug      Enable debug mode\n");
+    printf("  -d, --debug        Enable debug mode\n");
+    #ifdef YURIS_DEBUG
+    printf("Debug Options:\n");
+    printf("      --symbols      Show symbol list to stdout and exit\n");
+    #endif
 }
 
 void set_config_target(const char *path) {
@@ -58,7 +66,6 @@ void set_config_target(const char *path) {
     config.game_target[MAX_PATH_LEN - 1] = '\0';
 }
 
-/// @brief remove trailing slash
 void normalize_path(char *path) {
     size_t len = strlen(path);
     if (len > 1 && path[len - 1] == '/')
@@ -82,6 +89,12 @@ void parse_arguments(int argc, char *argv[]) {
 
             } else if (strcmp(arg, "-d") == 0 || strcmp(arg, "--debug") == 0) {
                 config.debug = true;
+
+            #ifdef YURIS_DEBUG
+            } else if (strcmp(arg, "--symbols") == 0) {
+                config.show_symbols = true;
+            #endif
+
             } else {
                 ERROR("Unknown option: %s\n", arg);
                 exit(EXIT_FAILURE);
@@ -172,29 +185,36 @@ int main(int argc, char *argv[]) {
     }
     INFO("Detected YU-RIS Version: %u XOR key: 0x%08X instruction len: %u\n", yuris_version->version, yuris_version->xor_key, yuris_version->instr_len);
 
-    // test call
-    char *testfile = "ysbin\\ysc.ybn";
-    bool file_exists = archive_file_exists(&manager, testfile);
+    // Load the command list
+    char *yscm_file = "ysbin\\ysc.ybn";
+    struct yuris_commands ysc;
+    bool file_exists = archive_file_exists(&manager, yscm_file);
     if (file_exists) {
         size_t out_len;
-        uint8_t *data = archive_file_get(&manager, testfile, &out_len);
+        uint8_t *data = archive_file_get(&manager, yscm_file, &out_len);
 
-        if (data && out_len > 4 && !strncmp((char *)data, "YSCM", 4)) {
-            INFO("Successfully got file data for %s\n", testfile);
-            yuris_free(data);
-        } else
-            ERROR("Failed to get file data for %s: %s\n", testfile, strerror(errno));
+        int parse_result = parse_ysc(data, out_len, &ysc);
+        yuris_free(data);
+
+        if (parse_result != 0) {
+            ERROR("Failed to parse %s: %s\n", yscm_file, strerror(-parse_result));
+            goto fail;
+        }
+        INFO("YSC.bin (v%u) contains %u commands\n", ysc.version, ysc.command_count);
     }
 
-    if (yuris_version->version < 300) {
-        ERROR("Unsupported YU-RIS version: %u\n", yuris_version->version);
-        return EXIT_FAILURE;
+    #ifdef YURIS_DEBUG
+    if (config.show_symbols) {
+        debug_show_ysc_commands(&ysc);
+        goto success;
     }
+    #endif
 
+    success:
+        archive_manager_free(&manager);
+        return 0;
 
-    // TODO:
-    // [load script files] 
-    // [ run VM loop]
-    archive_manager_free(&manager);
-    return 0;
+    fail:
+        archive_manager_free(&manager);
+        exit(EXIT_FAILURE);
 }

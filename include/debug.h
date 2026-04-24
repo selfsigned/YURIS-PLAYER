@@ -1,3 +1,4 @@
+
 /* YURIS-PLAYER - An open source YU-RIS engine reimplementation
 Copyright (C) 2026 Selfsigned <me@selfsigned.dev>
 
@@ -15,27 +16,14 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef YURISPLAYER_H
-#define YURISPLAYER_H
+#ifndef DEBUG_H
+#define DEBUG_H
 
-#include <stdio.h>
-#include <stdbool.h>
-#include <SDL2/SDL.h>
+#include "script_reader.h"
 
-#include "utils.h" // posix stuff and log macros
+/// @brief show ysc command w/ args and signatures
+void debug_show_ysc_command(const struct ysc_command *cmd);
+/// @brief show all ysc commands
+void debug_show_ysc_commands(const struct yuris_commands *ysc);
 
-// Config
-struct config {
-    char game_target[MAX_PATH_LEN];
-    bool debug;
-
-    #ifdef YURIS_DEBUG
-    bool show_symbols;
-    #endif
-};
-extern struct config config;
-
-#endif
-
-
-
+#endif 
