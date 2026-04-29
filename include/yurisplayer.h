@@ -31,6 +31,7 @@ struct config {
 
     #ifdef YURIS_DEBUG
     bool show_symbols;
+    bool show_script_list;
     #endif
 };
 extern struct config config;

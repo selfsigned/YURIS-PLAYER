@@ -5,6 +5,16 @@ project('yuris-player', 'c',
 
 sdl2_dep = dependency('sdl2')
 
+cc = meson.get_compiler('c')
+iconv_dep = dependency('iconv', required: false)
+if not iconv_dep.found()
+  if cc.has_function('iconv', prefix: '#include <iconv.h>')
+    iconv_dep = declare_dependency()
+  else
+    iconv_dep = cc.find_library('iconv', required: true)
+  endif
+endif
+
 libyuris_dir = meson.current_source_dir() / 'libyuris/target/release'
 libyuris_path = libyuris_dir / 'libyuris_decomp.so'
 
@@ -34,7 +44,8 @@ src_files = files(
   'src/yurisplayer.c',
   'src/archive.c',
   'src/debug.c',
-  'src/script_reader.c'
+  'src/script_reader.c',
+  'src/encoding.c'
 )
 
 if get_option('buildtype') in ['debug', 'debugoptimized']
@@ -44,5 +55,5 @@ endif
 executable('yuris-player',
   src_files,
   include_directories: inc,
-  dependencies: [libyuris_dep, sdl2_dep],
+  dependencies: [libyuris_dep, sdl2_dep, iconv_dep],
 )

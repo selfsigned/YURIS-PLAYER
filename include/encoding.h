@@ -15,18 +15,17 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+#ifndef ENCODING_H
+#define ENCODING_H
 
-#ifndef DEBUG_H
-#define DEBUG_H
+#include <stddef.h>
 
-#include "script_reader.h"
+/// @brief Convert a CP932 buffer to a new null-terminated UTF-8 string.
+/// @return UTF-8 that the caller should free, NULL on error
+char *cp932_to_utf8(const char *input, size_t input_len, size_t *out_len);
 
-/// @brief show ysc command w/ args and signatures
-void debug_show_ysc_command(const struct ysc_command *cmd);
-/// @brief show all ysc commands
-void debug_show_ysc_commands(const struct yuris_commands *ysc);
+/// @brief Convert a NULL-terminated CP932 string to a new NULL-terminated UTF-8 string.
+/// @return UTF-8 that the caller should free, NULL on error
+char *cp932_str_to_utf8(const char *input);
 
-/// @brief show all the scripts in the script list
-void debug_show_ystl_scripts(const struct yuris_script_list *ystl);
-void debug_show_ystl_script(const struct ystl_script *script);
-#endif 
+#endif

@@ -45,3 +45,14 @@ void debug_show_ysc_commands(const struct yuris_commands *ysc) {
     for (uint32_t i = 0; i < ysc->command_count; ++i)
         debug_show_ysc_command(&ysc->commands[i]);
 }
+
+void debug_show_ystl_script(const struct ystl_script *script) {
+    if (!script) return;
+    printf("[%u] %s (vars: %u, labels: %u, text: %u)\n", script->idx, script->path, script->variable_count, script->label_count, script->text_count);
+}
+
+void debug_show_ystl_scripts(const struct yuris_script_list *ystl) {
+    if (!ystl) return;
+    for (uint32_t i = 0; i < ystl->scripts_count; ++i)
+        debug_show_ystl_script(&ystl->scripts[i]);
+}

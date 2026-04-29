@@ -36,9 +36,9 @@ enum ysc_arg_type {
     YSC_ARG_STR,
 };
 
-/// @brief Command definition 
+/// @brief Command definition (ysbin\ysc.ybn)
 struct yuris_commands {
-    char magic[4];  // "YSCM"
+    char magic[4];  ///< "YSCM"
     uint32_t version;
     uint32_t command_count;
     uint32_t padding;
@@ -61,5 +61,31 @@ struct yuris_commands {
 /// @param size size of the YSC data
 /// @return 0 on success, negative ERRNO code on failure
 int parse_ysc(const uint8_t *data, size_t size, struct yuris_commands *out);
+
+// YSTL //
+
+#define YSTL_MAX_SCRIPTS 1024
+#define YSTL_MAX_PATH_LEN 256
+
+/// @brief Script file entries (ysbin\yst_list.ybn)
+struct yuris_script_list {
+    char magic[4]; ///< "YSTL"
+    uint32_t version;
+    uint32_t scripts_count;
+    struct ystl_script {
+        uint32_t idx;
+        uint32_t path_length;
+        char path[YSTL_MAX_PATH_LEN*4]; ///< UTF-8 from SJIS and null-terminated
+        uint64_t _modification_time; ///< actually FILETIME
+        uint32_t variable_count; ///< 0xFFFFFFFF if non-applicable (engine spec)
+        uint32_t label_count;
+        uint32_t text_count;
+    } scripts[YSTL_MAX_SCRIPTS];
+};
+
+/// @param data ptr to the YSTL data to parse
+/// @param size size of the YSTL data
+/// @return 0 on success, negative ERRNO code on failure
+int parse_ystl(const uint8_t *data, size_t size, struct yuris_script_list *out);
 
 #endif

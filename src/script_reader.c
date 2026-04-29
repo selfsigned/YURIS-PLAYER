@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <string.h>
 
 #include "utils.h"
+#include "encoding.h"
 
 
 // helpers //
@@ -48,6 +49,20 @@ static inline bool read_u32(const uint8_t *data, size_t *offset, size_t max, uin
     return true;
 }
 
+static inline bool read_u64(const uint8_t *data, size_t *offset, size_t max, uint64_t *out) {
+    if (!data || !offset || !out) return false;
+    if (*offset + 8 > max) return false;
+
+    uint32_t lo, hi;
+    if (!read_u32(data, offset, max, (uint32_t *)&lo)) return false;
+    if (!read_u32(data, offset, max, (uint32_t *)&hi)) return false;
+    *out = ((uint64_t)hi) << 32 | (uint64_t)lo;
+    return true;
+}
+
+/// @brief read null terminated strings safely
+/// @param offset external cursor in data buffer
+/// @param max maximum offset to read from *data
 static inline bool read_str(const uint8_t *data, size_t *offset, size_t max, char *out, size_t *out_len, size_t max_len) {
     if (!data || !offset || !out || max_len == 0) return false;
     if (*offset >= max) return false;
@@ -66,6 +81,24 @@ static inline bool read_str(const uint8_t *data, size_t *offset, size_t max, cha
     return true;
 }
 
+/// @brief read fixed length chars and add a null terminator (not null terminated in input).
+/// @param out should be at least field_len + 1 (for NULL terminator)
+/// @param field_len exact length of the field in the input data
+/// @return true if the field was fully read and output was null terminated.
+static inline bool read_char_fixed(const uint8_t *data, size_t *offset, size_t max,
+                                   char *out, size_t *out_len, size_t field_len)
+{
+    if (!data || !offset || !out || field_len == 0) return false;
+    if (*offset >= max) return false;
+    if (*offset + field_len > max) return false;
+
+    memcpy(out, data + *offset, field_len);
+    out[field_len] = '\0';
+
+    *offset += field_len;
+    if (out_len) *out_len = field_len;
+    return true;
+}
 
 // parsing //
 
@@ -116,4 +149,52 @@ int parse_ysc(const uint8_t *data, size_t size, struct yuris_commands *out) {
     fail_readsize:
         ERROR("Unexpected end of data while parsing YSC\n");
         return -EINVAL;
+}
+
+int parse_ystl(const uint8_t *data, size_t size, struct yuris_script_list *out) {
+    if (!data || !out ) goto fail_invalid;
+    size_t offset = 0;
+
+    if (!read_u32(data, &offset, size, (uint32_t *)&out->magic) || strncmp(out->magic, "YSTL", 4) != 0) return -EBADMSG;
+    if (!read_u32(data, &offset, size, &out->version)) goto fail_readsize;
+    if (!read_u32(data, &offset, size, &out->scripts_count)) goto fail_readsize;
+    if (out->scripts_count > YSTL_MAX_SCRIPTS) goto fail_quantity;
+
+    for (uint32_t i = 0; i < out->scripts_count; ++i) {
+        if (offset >= size) goto fail_readsize;
+        struct ystl_script *script = &out->scripts[i];
+
+        if (!read_u32(data, &offset, size, &script->idx)) goto fail_readsize;
+        if (!read_u32(data, &offset, size, &script->path_length)) goto fail_readsize;
+        if (script->path_length == 0 || script->path_length >= YSTL_MAX_PATH_LEN) goto fail_invalid;
+
+        size_t path_read;
+        char sjis_path[YSTL_MAX_PATH_LEN];
+        if (!read_char_fixed(data, &offset, size, sjis_path, &path_read, script->path_length)) goto fail_readsize;
+        if (path_read != script->path_length) goto fail_invalid;
+
+        char *utf8_path = cp932_str_to_utf8(sjis_path);
+        if (!utf8_path) return (errno) ? -errno : -EILSEQ;
+
+        strncpy(script->path, utf8_path, YSTL_MAX_PATH_LEN*4);
+        free(utf8_path);
+
+        if (!read_u64(data, &offset, size, &script->_modification_time)) goto fail_readsize;
+        if (!read_u32(data, &offset, size, &script->variable_count)) goto fail_readsize;
+        if (!read_u32(data, &offset, size, &script->label_count)) goto fail_readsize;
+        if (!read_u32(data, &offset, size, &script->text_count)) goto fail_readsize;
+    }
+
+    return 0;
+
+    fail_invalid:
+        ERROR("Invalid YSTL data\n");
+        return -EINVAL;
+    fail_quantity:
+        ERROR("YSTL script amount exceeds maximum supported\n");
+        return -EINVAL;
+    fail_readsize:
+        ERROR("Unexpected end of data while parsing YSTL\n");
+        return -EINVAL;
+    return 0;
 }

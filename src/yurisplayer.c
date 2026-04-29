@@ -48,7 +48,8 @@ void show_help() {
     printf("  -d, --debug        Enable debug mode\n");
     #ifdef YURIS_DEBUG
     printf("Debug Options:\n");
-    printf("      --symbols      Show symbol list to stdout and exit\n");
+    printf("      --symbols      Show symbol list from ysc.ybn to stdout and exit\n");
+    printf("      --script-list  Show the list of scripts from yst_list.ybn and exit\n");
     #endif
 }
 
@@ -93,6 +94,8 @@ void parse_arguments(int argc, char *argv[]) {
             #ifdef YURIS_DEBUG
             } else if (strcmp(arg, "--symbols") == 0) {
                 config.show_symbols = true;
+            } else if (strcmp(arg, "--script-list") == 0) {
+                config.show_script_list = true;
             #endif
 
             } else {
@@ -206,6 +209,32 @@ int main(int argc, char *argv[]) {
     #ifdef YURIS_DEBUG
     if (config.show_symbols) {
         debug_show_ysc_commands(&ysc);
+        goto success;
+    }
+    #endif
+
+    // Load the script list
+    char *ystl_file = "ysbin\\yst_list.ybn";
+    struct yuris_script_list ystl;
+    size_t out_len;
+    uint8_t *ystl_data = archive_file_get(&manager, ystl_file, &out_len);
+    if (ystl_data) {
+        int parse_result = parse_ystl(ystl_data, out_len, &ystl);
+        yuris_free(ystl_data);
+
+        if (parse_result != 0) {
+            ERROR("Failed to parse %s: %s\n", ystl_file, strerror(-parse_result));
+            goto fail;
+        }
+        INFO("YSTL.bin (v%u) contains %u scripts\n", ystl.version, ystl.scripts_count);
+    } else {
+        ERROR("Failed to load %s: %s\n", ystl_file, strerror(errno));
+        goto fail;
+    }
+
+    #ifdef YURIS_DEBUG
+    if (config.show_script_list) {
+        debug_show_ystl_scripts(&ystl);
         goto success;
     }
     #endif
