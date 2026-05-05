@@ -29,4 +29,10 @@ void debug_show_ysc_commands(const struct yuris_commands *ysc);
 /// @brief show all the scripts in the script list
 void debug_show_ystl_scripts(const struct yuris_script_list *ystl);
 void debug_show_ystl_script(const struct ystl_script *script);
+
+/// @brief show all variables in the variable list
+/// @param ystl used to resolve script names
+void debug_show_ysv_variables(const struct yuris_variables *ysv, const struct yuris_script_list *ystl);
+void debug_show_ysv_variable(const struct ysv_variable *var, const struct yuris_script_list *ystl);
+
 #endif 

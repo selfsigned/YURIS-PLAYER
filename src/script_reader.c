@@ -32,7 +32,18 @@ static inline bool read_u8(const uint8_t *data, size_t *offset, size_t max, uint
     if (*offset >= max) return false;
 
     *out = data[*offset];
-    (*offset) += 1;
+    *offset += 1;
+    return true;
+}
+
+static inline bool read_u16(const uint8_t *data, size_t *offset, size_t max, uint16_t *out) {
+    if (!data || !offset || !out) return false;
+    if (*offset + 2 > max) return false;
+
+    uint16_t v = (uint16_t)data[*offset] |
+                 (uint16_t)data[*offset + 1] << 8;
+    *offset += 2;
+    *out = v;
     return true;
 }
 
@@ -151,16 +162,17 @@ int parse_ysc(const uint8_t *data, size_t size, struct yuris_commands *out) {
         return -EINVAL;
 }
 
+// TODO: handle <3xx engine versions (e.g v255)
 int parse_ystl(const uint8_t *data, size_t size, struct yuris_script_list *out) {
     if (!data || !out ) goto fail_invalid;
     size_t offset = 0;
 
     if (!read_u32(data, &offset, size, (uint32_t *)&out->magic) || strncmp(out->magic, "YSTL", 4) != 0) return -EBADMSG;
     if (!read_u32(data, &offset, size, &out->version)) goto fail_readsize;
-    if (!read_u32(data, &offset, size, &out->scripts_count)) goto fail_readsize;
-    if (out->scripts_count > YSTL_MAX_SCRIPTS) goto fail_quantity;
+    if (!read_u32(data, &offset, size, &out->script_count)) goto fail_readsize;
+    if (out->script_count > YSTL_MAX_SCRIPTS) goto fail_quantity;
 
-    for (uint32_t i = 0; i < out->scripts_count; ++i) {
+    for (uint32_t i = 0; i < out->script_count; ++i) {
         if (offset >= size) goto fail_readsize;
         struct ystl_script *script = &out->scripts[i];
 
@@ -196,5 +208,97 @@ int parse_ystl(const uint8_t *data, size_t size, struct yuris_script_list *out) 
     fail_readsize:
         ERROR("Unexpected end of data while parsing YSTL\n");
         return -EINVAL;
+}
+
+int parse_ysv(const uint8_t *data, size_t size, struct yuris_variables *out) {
+    if (!data || !out ) goto fail_invalid;
+    size_t offset = 0;
+
+    if (!read_u32(data, &offset, size, (uint32_t *)&out->magic) || strncmp(out->magic, "YSVR", 4) != 0) goto fail_invalid;
+    if (!read_u32(data, &offset, size, &out->version)) goto fail_readsize;
+    if (!read_u16(data, &offset, size, &out->variable_count)) goto fail_readsize;
+
+    uint16_t max_var_idx = 0;
+    out->variables = calloc(out->variable_count, sizeof(struct ysv_variable));
+    if (!out->variables) goto fail_alloc;
+    for (uint16_t i = 0; i < out->variable_count; ++i) {
+        if (offset >= size) goto fail_readsize;
+        struct ysv_variable *var = &out->variables[i];
+
+        if (!read_u8(data, &offset, size, (uint8_t *)&var->scope)) goto fail_readsize;
+        if (var->scope > YSV_SCOPE_FUNCTION) goto fail_invalid;
+        if (out->version >= 481)
+            if (!read_u8(data, &offset, size, &var->_global_or_user)) goto fail_readsize;
+        if (!read_u16(data, &offset, size, &var->script_idx)) goto fail_readsize;
+        if (!read_u16(data, &offset, size, &var->variable_idx)) goto fail_readsize;
+        if (!read_u8(data, &offset, size, (uint8_t *)&var->type)) goto fail_readsize;
+        if (var->type > YSV_EXPR) goto fail_invalid;
+
+        if (!read_u8(data, &offset, size, &var->dimension_size)) goto fail_readsize;
+        if (var->dimension_size > MAX_YSV_ARR_DIMENSIONS) goto fail_dim_qty;
+        for (uint8_t dim_i = 0; dim_i < var->dimension_size; ++dim_i)
+            if (!read_u32(data, &offset, size, &var->dimensions[dim_i])) goto fail_readsize;
+
+        switch (var->type) {
+            case YSC_ARG_ANY:
+                break;
+            case YSC_ARG_INT:
+            case YSC_ARG_FLOAT:
+                if (!read_u64(data, &offset, size, (uint64_t *)&var->initial_value)) goto fail_readsize;
+                break;
+
+            case YSC_ARG_STR:
+                if (!read_u16(data, &offset, size, &var->initial_value.expr_val.length)) goto fail_readsize;
+
+                var->initial_value.expr_val.expr = calloc(var->initial_value.expr_val.length, sizeof(uint8_t));
+                if (!var->initial_value.expr_val.expr) goto fail_alloc;
+
+                for (uint16_t expr_i = 0; expr_i < var->initial_value.expr_val.length; ++expr_i)
+                    if (!read_u8(data, &offset, size, &var->initial_value.expr_val.expr[expr_i])) goto fail_readsize;
+                break;
+            default:
+                goto fail_invalid;
+        }
+
+        if (var->variable_idx > max_var_idx) max_var_idx = var->variable_idx;
+    }
+
+
+    out->lookup = calloc(max_var_idx + 1, sizeof(struct ysv_variable *));
+    for (uint16_t i = 0; i < out->variable_count; ++i) {
+        struct ysv_variable *var = &out->variables[i];
+        if (var->variable_idx <= max_var_idx)
+            out->lookup[var->variable_idx] = var;
+    }
+
+
     return 0;
+
+    fail_invalid:
+        ERROR("Invalid YSV data\n");
+        return -EINVAL;
+    fail_readsize:
+        ERROR("Unexpected end of data while parsing YSV\n");
+        return -EINVAL;
+    fail_dim_qty:
+        ERROR("YSV variable dimension size exceeds maximum supported\n");
+        return -EINVAL;
+    fail_alloc:
+        ERROR("Failed to allocate memory for YSV variable expression\n");
+        return -ENOMEM;
+}
+
+void free_ysv(struct yuris_variables *ysv) {
+    if (!ysv) return;
+    for (uint16_t i = 0; i < ysv->variable_count; ++i) {
+        struct ysv_variable *var = &ysv->variables[i];
+        if (var->type == YSV_EXPR && var->initial_value.expr_val.expr) {
+            free(var->initial_value.expr_val.expr);
+            var->initial_value.expr_val.expr = NULL;
+        }
+    }
+    free(ysv->variables);
+    free(ysv->lookup);
+    ysv->variables = NULL;
+    ysv->lookup = NULL;
 }

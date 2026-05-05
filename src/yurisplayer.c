@@ -50,6 +50,7 @@ void show_help() {
     printf("Debug Options:\n");
     printf("      --symbols      Show symbol list from ysc.ybn to stdout and exit\n");
     printf("      --script-list  Show the list of scripts from yst_list.ybn and exit\n");
+    printf("      --var-list     Show the list of variables from ysv.ybn and exit\n");
     #endif
 }
 
@@ -96,6 +97,8 @@ void parse_arguments(int argc, char *argv[]) {
                 config.show_symbols = true;
             } else if (strcmp(arg, "--script-list") == 0) {
                 config.show_script_list = true;
+            } else if (strcmp(arg, "--var-list") == 0) {
+                config.show_var_list = true;
             #endif
 
             } else {
@@ -108,6 +111,21 @@ void parse_arguments(int argc, char *argv[]) {
     }
 }
 
+
+// Main & Init //
+
+int load_script(archiveManager *manager, const char *vpath, void *out, int (*callback)(const uint8_t *data, size_t size, void *user)) {
+    size_t out_len;
+    uint8_t *script_data = archive_file_get(manager, vpath, &out_len);
+    if (!script_data) {
+        ERROR("Failed to load script '%s': %s\n", vpath, strerror(errno));
+        return -1;
+    }
+    int result = callback(script_data, out_len, out);
+    yuris_free(script_data);
+
+    return result;
+}
 
 int main(int argc, char *argv[]) {
     archiveManager manager = {0};
@@ -188,23 +206,16 @@ int main(int argc, char *argv[]) {
     }
     INFO("Detected YU-RIS Version: %u XOR key: 0x%08X instruction len: %u\n", yuris_version->version, yuris_version->xor_key, yuris_version->instr_len);
 
-    // Load the command list
-    char *yscm_file = "ysbin\\ysc.ybn";
-    struct yuris_commands ysc;
-    bool file_exists = archive_file_exists(&manager, yscm_file);
-    if (file_exists) {
-        size_t out_len;
-        uint8_t *data = archive_file_get(&manager, yscm_file, &out_len);
+    struct yuris_commands ysc = {0};
+    struct yuris_script_list ystl = {0};
+    struct yuris_variables ysv = {0};
 
-        int parse_result = parse_ysc(data, out_len, &ysc);
-        yuris_free(data);
-
-        if (parse_result != 0) {
-            ERROR("Failed to parse %s: %s\n", yscm_file, strerror(-parse_result));
-            goto fail;
-        }
-        INFO("YSC.bin (v%u) contains %u commands\n", ysc.version, ysc.command_count);
+    // Command list //
+    if (load_script(&manager, "ysbin\\ysc.ybn", &ysc, (int (*)(const uint8_t *, size_t, void *))parse_ysc)) {
+        if (errno < 0) ERROR("Failed to load ysc.ybn: %s\n", strerror(-errno));
+        goto fail;
     }
+    INFO("YSC.bin (v%u) contains %u commands\n", ysc.version, ysc.command_count);
 
     #ifdef YURIS_DEBUG
     if (config.show_symbols) {
@@ -213,24 +224,12 @@ int main(int argc, char *argv[]) {
     }
     #endif
 
-    // Load the script list
-    char *ystl_file = "ysbin\\yst_list.ybn";
-    struct yuris_script_list ystl;
-    size_t out_len;
-    uint8_t *ystl_data = archive_file_get(&manager, ystl_file, &out_len);
-    if (ystl_data) {
-        int parse_result = parse_ystl(ystl_data, out_len, &ystl);
-        yuris_free(ystl_data);
-
-        if (parse_result != 0) {
-            ERROR("Failed to parse %s: %s\n", ystl_file, strerror(-parse_result));
-            goto fail;
-        }
-        INFO("YSTL.bin (v%u) contains %u scripts\n", ystl.version, ystl.scripts_count);
-    } else {
-        ERROR("Failed to load %s: %s\n", ystl_file, strerror(errno));
+    // Script list //
+    if (load_script(&manager, "ysbin\\yst_list.ybn", &ystl, (int (*)(const uint8_t *, size_t, void *))parse_ystl)) {
+        if (errno < 0) ERROR("Failed to load yst_list.ybn: %s\n", strerror(-errno));
         goto fail;
     }
+    INFO("YSTL.bin (v%u) contains %u scripts\n", ystl.version, ystl.script_count);
 
     #ifdef YURIS_DEBUG
     if (config.show_script_list) {
@@ -239,11 +238,28 @@ int main(int argc, char *argv[]) {
     }
     #endif
 
+    // Variable list //
+    if (load_script(&manager, "ysbin\\ysv.ybn", &ysv, (int (*)(const uint8_t *, size_t, void *))parse_ysv)) {
+        if (errno < 0) ERROR("Failed to load ysv.ybn: %s\n", strerror(-errno));
+        goto fail;
+    }
+    INFO("YSV.bin (v%u) contains %u variables\n", ysv.version, ysv.variable_count);
+
+    #ifdef YURIS_DEBUG
+    if (config.show_var_list) {
+        debug_show_ysv_variables(&ysv, &ystl);
+        goto success;
+    }
+    #endif
+
+
     success:
         archive_manager_free(&manager);
+        free_ysv(&ysv);
         return 0;
 
     fail:
         archive_manager_free(&manager);
+        free_ysv(&ysv);
         exit(EXIT_FAILURE);
 }

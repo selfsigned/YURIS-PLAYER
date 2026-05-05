@@ -53,6 +53,57 @@ void debug_show_ystl_script(const struct ystl_script *script) {
 
 void debug_show_ystl_scripts(const struct yuris_script_list *ystl) {
     if (!ystl) return;
-    for (uint32_t i = 0; i < ystl->scripts_count; ++i)
+    for (uint32_t i = 0; i < ystl->script_count; ++i)
         debug_show_ystl_script(&ystl->scripts[i]);
+}
+
+void debug_show_ysv_variable(const struct ysv_variable *var, const struct yuris_script_list *ystl) {
+    if (!var) return;
+
+    char scope_str[9] = {0};
+    switch (var->scope) {
+        case YSV_SCOPE_NONE: strcpy(scope_str, "NONE"); break;
+        case YSV_SCOPE_GLOBAL: strcpy(scope_str, "GLOBAL"); break;
+        case YSV_SCOPE_STATIC: strcpy(scope_str, "STATIC"); break;
+        case YSV_SCOPE_FUNCTION: strcpy(scope_str, "FUNCTION"); break;
+        default: strcpy(scope_str, "UNKNOWN"); break;
+    }
+
+    char type_str[8] = {0};
+    switch (var->type) {
+        case YSV_NONE: strcpy(type_str, "NONE"); break;
+        case YSV_INT: strcpy(type_str, "INT"); break;
+        case YSV_FLOAT: strcpy(type_str, "FLOAT"); break;
+        case YSV_EXPR: strcpy(type_str, "EXPR"); break;
+        default: strcpy(type_str, "UNKNOWN"); break;
+    }
+
+    printf("%u\t%s\t%s\t%u\t", var->variable_idx, scope_str, type_str, var->dimension_size);
+    switch (var->type) {
+        case YSC_ARG_ANY:
+            printf("N/A\t");
+            break;
+        case YSC_ARG_INT:
+            printf("%ld\t", var->initial_value.int_val);
+            break;
+        case YSC_ARG_FLOAT:
+            printf("%f\t", var->initial_value.float_val);
+            break;
+        case YSC_ARG_STR:
+            for (uint16_t i = 0; i < var->initial_value.expr_val.length; ++i)
+                printf("%02X ", var->initial_value.expr_val.expr[i]);
+            printf("\t");
+            break;
+        default:
+            printf("UNKNOWN\t");
+            break;
+    }
+    printf("%u\t%s\n", var->script_idx, (var->script_idx < ystl->script_count) ? ystl->scripts[var->script_idx].path : "UNKNOWN");
+}
+
+void debug_show_ysv_variables(const struct yuris_variables *ysv, const struct yuris_script_list *ystl) {
+    if (!ysv) return;
+    printf("var_idx\tscope\ttype\tdim\tinit\tscript_idx\tscript_path\n");
+    for (uint16_t i = 0; i < ysv->variable_count; ++i)
+        debug_show_ysv_variable(&ysv->variables[i], ystl);
 }

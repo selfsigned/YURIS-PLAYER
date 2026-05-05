@@ -24,7 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // YSC //
 
 #define MAX_YSC_COMMANDS 255
-#define MAX_YSC_FUNCNAME_LEN 32 
+#define MAX_YSC_FUNCNAME_LEN 32
 #define MAX_YSC_ARGS 128
 #define MAX_YSC_ERRMSG 128
 #define YSC_ERR_STR_COUNT 37
@@ -71,7 +71,7 @@ int parse_ysc(const uint8_t *data, size_t size, struct yuris_commands *out);
 struct yuris_script_list {
     char magic[4]; ///< "YSTL"
     uint32_t version;
-    uint32_t scripts_count;
+    uint32_t script_count;
     struct ystl_script {
         uint32_t idx;
         uint32_t path_length;
@@ -87,5 +87,56 @@ struct yuris_script_list {
 /// @param size size of the YSTL data
 /// @return 0 on success, negative ERRNO code on failure
 int parse_ystl(const uint8_t *data, size_t size, struct yuris_script_list *out);
+
+// YSV //
+#define MAX_YSV_ARR_DIMENSIONS 8
+
+enum ysv_variable_scope {
+    YSV_SCOPE_NONE,
+    YSV_SCOPE_GLOBAL,
+    YSV_SCOPE_STATIC, ///< var is local to a script
+    YSV_SCOPE_FUNCTION, ///< var is local to a function
+};
+
+enum ysv_variable_type {
+    YSV_NONE,
+    YSV_INT,
+    YSV_FLOAT,
+    YSV_EXPR,
+};
+
+struct yuris_variables {
+    char magic[4]; ///< "YSVR"
+    uint32_t version;
+    uint16_t variable_count;
+    struct ysv_variable {
+        enum ysv_variable_scope scope;
+        uint8_t _global_or_user; ///< only in ~v255, un-needed
+        uint16_t script_idx; ///< index into YSTL.bin that owns this (TODO: validate that assumption)
+        uint16_t variable_idx;
+        enum  ysv_variable_type type;
+        uint8_t  dimension_size;
+        uint32_t dimensions[8];  ///< at [0] for 1D arrays, 0 for non-arrays
+
+        /// first variable
+        union ysv_variable_value {
+            int64_t int_val;
+            double float_val;
+            struct {
+                uint16_t length;
+                uint8_t *expr; ///<  expression argument for expression VM
+            } expr_val;
+        } initial_value;
+    } *variables;
+
+    struct ysv_variable **lookup; ///< lookup table by actual variable index
+};
+
+/// @param data ptr to the YSV data to parse
+/// @param size size of the YSV data
+/// @return 0 on success, negative ERRNO code on failure
+int parse_ysv(const uint8_t *data, size_t size, struct yuris_variables *out);
+void free_ysv(struct yuris_variables *ysv);
+
 
 #endif
