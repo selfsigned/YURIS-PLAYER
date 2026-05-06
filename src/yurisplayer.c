@@ -51,6 +51,7 @@ void show_help() {
     printf("      --symbols      Show symbol list from ysc.ybn to stdout and exit\n");
     printf("      --script-list  Show the list of scripts from yst_list.ybn and exit\n");
     printf("      --var-list     Show the list of variables from ysv.ybn and exit\n");
+    printf("      --label-list   Show the list of labels from ysl.ybn and exit\n"); 
     #endif
 }
 
@@ -99,6 +100,8 @@ void parse_arguments(int argc, char *argv[]) {
                 config.show_script_list = true;
             } else if (strcmp(arg, "--var-list") == 0) {
                 config.show_var_list = true;
+            } else if (strcmp(arg, "--label-list") == 0) {
+                config.show_label_list = true;
             #endif
 
             } else {
@@ -209,6 +212,7 @@ int main(int argc, char *argv[]) {
     struct yuris_commands ysc = {0};
     struct yuris_script_list ystl = {0};
     struct yuris_variables ysv = {0};
+    struct yuris_labels ysl = {0};
 
     // Command list //
     if (load_script(&manager, "ysbin\\ysc.ybn", &ysc, (int (*)(const uint8_t *, size_t, void *))parse_ysc)) {
@@ -253,13 +257,30 @@ int main(int argc, char *argv[]) {
     #endif
 
 
+    // Label list //
+    if (load_script(&manager, "ysbin\\ysl.ybn", &ysl, (int (*)(const uint8_t *, size_t, void *))parse_ysl)) {
+        if (errno < 0) ERROR("Failed to load ysl.ybn: %s\n", strerror(-errno));
+        goto fail;
+    }
+    INFO("YSL.bin (v%u) contains %u labels\n", ysl.version, ysl.label_count);
+
+    #ifdef YURIS_DEBUG
+    if (config.show_label_list) {
+        debug_show_ysl_labels(&ysl, &ystl);
+        goto success;
+    }
+    #endif
+
+
     success:
         archive_manager_free(&manager);
         free_ysv(&ysv);
+        free_ysl(&ysl);
         return 0;
 
     fail:
         archive_manager_free(&manager);
         free_ysv(&ysv);
+        free_ysl(&ysl);
         exit(EXIT_FAILURE);
 }

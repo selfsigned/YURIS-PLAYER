@@ -35,4 +35,9 @@ void debug_show_ystl_script(const struct ystl_script *script);
 void debug_show_ysv_variables(const struct yuris_variables *ysv, const struct yuris_script_list *ystl);
 void debug_show_ysv_variable(const struct ysv_variable *var, const struct yuris_script_list *ystl);
 
+/// @brief show all labels
+/// @param ystl used to resolve script names
+void debug_show_ysl_labels(const struct yuris_labels *ysl, const struct yuris_script_list *ystl);
+void debug_show_ysl_label(const struct ysl_label *label, const struct yuris_script_list *ystl);
+
 #endif 

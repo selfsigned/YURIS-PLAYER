@@ -302,3 +302,61 @@ void free_ysv(struct yuris_variables *ysv) {
     ysv->variables = NULL;
     ysv->lookup = NULL;
 }
+
+int parse_ysl(const uint8_t *data, size_t size, struct yuris_labels *out) {
+    if (!data || !out ) goto fail_invalid;
+    size_t offset = 0;
+
+    if (!read_u32(data, &offset, size, (uint32_t *)&out->magic) || strncmp(out->magic, "YSLB", 4) != 0) goto fail_invalid;
+    if (!read_u32(data, &offset, size, &out->version)) goto fail_readsize;
+    if (!read_u32(data, &offset, size, &out->label_count)) goto fail_readsize;
+    offset += 256 * 4; // skip [0x100], engine's internal label lookup thing
+
+    out->labels = calloc(out->label_count, sizeof(struct ysl_label));
+    if (!out->labels) goto fail_alloc;
+    for (uint32_t i = 0; i < out->label_count; ++i) {
+        if (offset >= size) goto fail_readsize;
+        struct ysl_label *label = &out->labels[i];
+
+        uint8_t len = 0;
+        size_t name_read = 0;
+        if (!read_u8(data, &offset, size, &len)) goto fail_readsize;
+        char *sjis_name = malloc(len + 1);
+        if (!sjis_name) goto fail_alloc ;
+        if (!read_char_fixed(data, &offset, size, sjis_name, &name_read, len) || name_read != len) {
+            free(sjis_name);
+            goto fail_readsize;
+        }
+        out->labels[i].name = cp932_str_to_utf8(sjis_name);
+        free(sjis_name);
+
+        if (!read_u32(data, &offset, size, &label->id)) goto fail_readsize;
+        if (!read_u32(data, &offset, size, &label->ip)) goto fail_readsize;
+        if (!read_u16(data, &offset, size, &label->script_idx)) goto fail_readsize;
+
+        if (!read_u8(data, &offset, size, &label->if_lvl)) goto fail_readsize;
+        if (!read_u8(data, &offset, size, &label->loop_lvl)) goto fail_readsize;
+    }
+
+    return 0;
+
+    fail_invalid:
+        ERROR("Invalid YSL data\n");
+        return -EINVAL;
+    fail_readsize:
+        ERROR("Unexpected end of data while parsing YSL\n");
+        return -EINVAL;
+    fail_alloc:
+        ERROR("Failed to allocate memory for YSL variable expression\n");
+        return -ENOMEM;
+}
+
+void free_ysl(struct yuris_labels *ysl) {
+    if (!ysl) return;
+    for (uint32_t i = 0; i < ysl->label_count; ++i) {
+        free(ysl->labels[i].name);
+        ysl->labels[i].name = NULL;
+    }
+    free(ysl->labels);
+    ysl->labels = NULL;
+}

@@ -58,7 +58,7 @@ void debug_show_ystl_scripts(const struct yuris_script_list *ystl) {
 }
 
 void debug_show_ysv_variable(const struct ysv_variable *var, const struct yuris_script_list *ystl) {
-    if (!var) return;
+    if (!var || !ystl) return;
 
     char scope_str[9] = {0};
     switch (var->scope) {
@@ -102,8 +102,28 @@ void debug_show_ysv_variable(const struct ysv_variable *var, const struct yuris_
 }
 
 void debug_show_ysv_variables(const struct yuris_variables *ysv, const struct yuris_script_list *ystl) {
-    if (!ysv) return;
     printf("var_idx\tscope\ttype\tdim\tinit\tscript_idx\tscript_path\n");
+    if (!ysv || !ystl) return;
     for (uint16_t i = 0; i < ysv->variable_count; ++i)
         debug_show_ysv_variable(&ysv->variables[i], ystl);
+}
+
+void debug_show_ysl_label(const struct ysl_label *label, const struct yuris_script_list *ystl) {
+    if (!label) return;
+    printf("%u\t%u\t%u\t%u\t%u\t%s\t%s\n",
+        label->id,
+        label->script_idx,
+        label->ip,
+        label->if_lvl,
+        label->loop_lvl,
+        label->name,
+        (label->script_idx < ystl->script_count) ? ystl->scripts[label->script_idx].path : "UNKNOWN");
+}
+
+void debug_show_ysl_labels(const struct yuris_labels *ysl, const struct yuris_script_list *ystl)
+{
+    printf("id\tscript_idx\tip\tif_lvl\tloop_lvl\tname\tscript_path\n");
+    if (!ysl || !ystl) return;
+    for (uint32_t i = 0; i < ysl->label_count; ++i)
+        debug_show_ysl_label(&ysl->labels[i], ystl);
 }

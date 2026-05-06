@@ -139,4 +139,27 @@ int parse_ysv(const uint8_t *data, size_t size, struct yuris_variables *out);
 void free_ysv(struct yuris_variables *ysv);
 
 
+// YSL //
+
+struct yuris_labels {
+    char magic[4]; ///< "YSLB"
+    uint32_t version;
+    uint32_t label_count;
+
+    struct ysl_label {
+        char *name; ///< CP932 converted to NULL-terminated UTF-8, preceded by length(u8) in-file
+        uint32_t id;
+        uint32_t ip; // TODO offset or IP ? I think IP is cooler
+        uint16_t script_idx; ///< index into YSTL.bin
+        uint8_t if_lvl;
+        uint8_t loop_lvl;
+    } *labels;
+};
+
+/// @param data ptr to the YSL data to parse
+/// @param size size of the YSL data
+/// @return 0 on success, negative ERRNO code on failure
+int parse_ysl(const uint8_t *data, size_t size, struct yuris_labels *out);
+void free_ysl(struct yuris_labels *ysl);
+
 #endif

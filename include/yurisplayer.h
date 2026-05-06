@@ -33,6 +33,7 @@ struct config {
     bool show_symbols;
     bool show_script_list;
     bool show_var_list;
+    bool show_label_list;
     #endif
 };
 extern struct config config;
