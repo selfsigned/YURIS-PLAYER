@@ -34,6 +34,7 @@ struct config {
     bool show_script_list;
     bool show_var_list;
     bool show_label_list;
+    int script_info_id; ///< -1 for all
     #endif
 };
 extern struct config config;

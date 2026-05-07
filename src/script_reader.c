@@ -111,6 +111,48 @@ static inline bool read_char_fixed(const uint8_t *data, size_t *offset, size_t m
     return true;
 }
 
+static inline void xor_data(uint8_t *data, size_t len, uint32_t key) {
+    uint8_t k[4] = {
+        (key >> 24) & 0xFF, // big-endian swap
+        (key >> 16) & 0xFF,
+        (key >> 8) & 0xFF,
+        key & 0xFF,
+    };
+    for (size_t i = 0; i < len; i++)
+        data[i] ^= k[i & 3];
+}
+
+static uint32_t guess_ystb_key(const uint8_t *data, size_t size) {
+    if (size < 32) return 0;
+
+    uint32_t version;
+    size_t offset = 4; /// magic(4)
+    if (!read_u32(data, &offset, size, &version)) return 0;
+
+    if (version < 300) {
+        // TODO validate this on ~v255 game
+        if (size < 0x30) return 0;
+
+        size_t key_off = 0x2C;
+        // stored in BE
+        return (uint32_t)data[key_off] << 24 |
+               (uint32_t)data[key_off + 1] << 16 |
+               (uint32_t)data[key_off + 2] << 8 |
+               (uint32_t)data[key_off + 3];
+    }
+
+    offset = 12; // magic(4) + version(4) + instr_count(4)
+    uint32_t instruction_size;
+    if (!read_u32(data, &offset, size, &instruction_size)) return 0;
+
+    size_t key_off = 32 + instruction_size + 8;
+    if (key_off + 4 > size) return 0;
+    return (uint32_t)data[key_off] << 24 |
+           (uint32_t)data[key_off + 1] << 16 |
+           (uint32_t)data[key_off + 2] << 8 |
+           (uint32_t)data[key_off + 3];
+}
+
 // parsing //
 
 int parse_ysc(const uint8_t *data, size_t size, struct yuris_commands *out) {
@@ -359,4 +401,122 @@ void free_ysl(struct yuris_labels *ysl) {
     }
     free(ysl->labels);
     ysl->labels = NULL;
+}
+
+int parse_yst(const uint8_t *data, size_t size, struct yuris_script *out) {
+    if (!data || !out ) goto fail_invalid;
+    size_t offset = 0;
+
+    if (!read_u32(data, &offset, size, (uint32_t *)&out->magic) || strncmp(out->magic, "YSTB", 4) != 0) goto fail_invalid;
+    if (!read_u32(data, &offset, size, &out->version)) goto fail_readsize;
+    if (!read_u32(data, &offset, size, &out->instruction_count)) goto fail_readsize;
+    if (!read_u32(data, &offset, size, &out->instruction_size)) goto fail_readsize;
+    if (!read_u32(data, &offset, size, &out->args_desc_size)) goto fail_readsize;
+    if (!read_u32(data, &offset, size, &out->args_vals_size)) goto fail_readsize;
+    if (!read_u32(data, &offset, size, &out->lines_size)) goto fail_readsize;
+    if (!read_u32(data, &offset, size, &out->_padding)) goto fail_readsize;
+
+    uint32_t xor_key = guess_ystb_key(data, size);
+    if (!xor_key) {
+        ERROR("Failed to guess YST XOR key\n");
+        return -EINVAL;
+    }
+    DEBUG("YST XOR key: 0x%08X\n", xor_key);
+
+    uint8_t *decrypted_cmd = malloc(out->instruction_size);
+    if (!decrypted_cmd) goto fail_alloc;
+    memcpy(decrypted_cmd, data + offset, out->instruction_size);
+    xor_data(decrypted_cmd, out->instruction_size, xor_key);
+    offset += out->instruction_size;
+
+    uint8_t *decrypted_args = malloc(out->args_desc_size);
+    if (!decrypted_args) goto fail_alloc;
+    memcpy(decrypted_args, data + offset, out->args_desc_size);
+    xor_data(decrypted_args, out->args_desc_size, xor_key);
+    offset += out->args_desc_size;
+
+    uint8_t *decrypted_vals = malloc(out->args_vals_size);
+    if (!decrypted_vals) goto fail_alloc;
+    memcpy(decrypted_vals, data + offset, out->args_vals_size);
+    xor_data(decrypted_vals, out->args_vals_size, xor_key);
+    offset += out->args_vals_size;
+
+    uint8_t *decrypted_lines = malloc(out->lines_size);
+    if (!decrypted_lines) goto fail_alloc;
+    memcpy(decrypted_lines, data + offset, out->lines_size);
+    xor_data(decrypted_lines, out->lines_size, xor_key);
+    offset += out->lines_size;
+
+    out->instructions = calloc(out->instruction_count, sizeof(struct yst_command));
+    if (!out->instructions) goto fail_alloc;
+    size_t cmd_offset = 0, arg_offset = 0, line_offset = 0;
+    for (uint32_t i = 0; i < out->instruction_count; ++i) {
+        if (cmd_offset >= out->instruction_size) goto fail_readsize_decrypt;
+        struct yst_command *cmd = &out->instructions[i];
+
+        if (!read_u8(decrypted_cmd, &cmd_offset, out->instruction_size, &cmd->code)) goto fail_readsize_decrypt;
+        if (!read_u8(decrypted_cmd, &cmd_offset, out->instruction_size, &cmd->narg)) goto fail_readsize_decrypt;
+        if (!read_u16(decrypted_cmd, &cmd_offset, out->instruction_size, &cmd->npar)) goto fail_readsize_decrypt;
+
+        if (!read_u32(decrypted_lines, &line_offset, out->lines_size, &cmd->lno)) goto fail_readsize_decrypt;
+
+        for (uint8_t arg_i = 0; arg_i < cmd->narg; ++arg_i) {
+            if (arg_offset >= out->args_desc_size) goto fail_readsize_decrypt;
+            struct yst_arg *arg = &cmd->args[arg_i];
+
+            if (!read_u16(decrypted_args, &arg_offset, out->args_desc_size, &arg->id)) goto fail_readsize_decrypt;
+            if (!read_u8(decrypted_args, &arg_offset, out->args_desc_size, (uint8_t *)&arg->type)) goto fail_readsize_decrypt;
+            if (arg->type > YST_ARG_MAX) goto fail_invalid;
+            if (!read_u8(decrypted_args, &arg_offset, out->args_desc_size, (uint8_t *)&arg->assign_type)) goto fail_readsize_decrypt;
+            if (arg->assign_type > YST_ASSIGN_XOR) goto fail_invalid;
+
+            if (!read_u32(decrypted_args, &arg_offset, out->args_desc_size, &arg->expr_len)) goto fail_readsize_decrypt;
+            uint32_t expr_offset;
+            if (!read_u32(decrypted_args, &arg_offset, out->args_desc_size, &expr_offset)) goto fail_readsize_decrypt;
+
+            if (arg->expr_len > 0) {
+                arg->expr = malloc(arg->expr_len);
+                if (!arg->expr) goto fail_alloc;
+                memcpy(arg->expr, decrypted_vals + expr_offset, arg->expr_len);
+            }
+        }
+    }
+
+
+    free(decrypted_cmd);
+    free(decrypted_args);
+    free(decrypted_vals);
+    free(decrypted_lines);
+    return 0;
+
+    fail_invalid:
+        ERROR("Invalid YST data\n");
+        return -EINVAL;
+    fail_readsize:
+        ERROR("Unexpected end of data while parsing YST\n");
+        return -EINVAL;
+    fail_alloc:
+        ERROR("Failed to allocate memory for YST\n");
+        return -ENOMEM;
+    fail_readsize_decrypt:
+        ERROR("Unexpected end of data while parsing decrypted YST sections\n");
+        free(decrypted_cmd);
+        free(decrypted_args);
+        free(decrypted_vals);
+        free(decrypted_lines);
+        return -EINVAL;
+}
+
+void free_yst(struct yuris_script *script) {
+    if (!script) return;
+    for (uint32_t i = 0; i < script->instruction_count; ++i) {
+        struct yst_command *cmd = &script->instructions[i];
+        for (uint8_t arg_i = 0; arg_i < cmd->narg; ++arg_i) {
+            struct yst_arg *arg = &cmd->args[arg_i];
+            free(arg->expr);
+            arg->expr = NULL;
+        }
+    }
+    free(script->instructions);
+    script->instructions = NULL;
 }

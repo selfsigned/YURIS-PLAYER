@@ -42,17 +42,19 @@ void debug_show_ysc_command(const struct ysc_command *cmd) {
 }
 
 void debug_show_ysc_commands(const struct yuris_commands *ysc) {
+    if (!ysc) return;
     for (uint32_t i = 0; i < ysc->command_count; ++i)
         debug_show_ysc_command(&ysc->commands[i]);
 }
 
 void debug_show_ystl_script(const struct ystl_script *script) {
     if (!script) return;
-    printf("[%u] %s (vars: %u, labels: %u, text: %u)\n", script->idx, script->path, script->variable_count, script->label_count, script->text_count);
+    printf("[%u]\t%u\t%u\t%u\t%s\n", script->idx, script->variable_count, script->label_count, script->text_count, script->path);
 }
 
 void debug_show_ystl_scripts(const struct yuris_script_list *ystl) {
     if (!ystl) return;
+    printf("[id]\tvars\tlabels\ttext\tname\n");
     for (uint32_t i = 0; i < ystl->script_count; ++i)
         debug_show_ystl_script(&ystl->scripts[i]);
 }
@@ -126,4 +128,63 @@ void debug_show_ysl_labels(const struct yuris_labels *ysl, const struct yuris_sc
     if (!ysl || !ystl) return;
     for (uint32_t i = 0; i < ysl->label_count; ++i)
         debug_show_ysl_label(&ysl->labels[i], ystl);
+}
+
+void debug_show_yst(const struct yuris_script *script, const struct ystl_script *info, const struct yuris_commands *ysc) {
+    if (!script || !info || !ysc) return;
+
+    printf("####  FILE=%s version=%d instructions=%u  ####\n", info->path, script->version, script->instruction_count);
+    for (uint32_t i = 0; i < script->instruction_count; ++i) {
+        const struct yst_command *cmd = &script->instructions[i];
+
+        const char *name = (cmd->code < ysc->command_count)
+            ? ysc->commands[cmd->code].name : NULL;
+
+        if (name) {
+            printf("%04u  %-16s narg=%-3u npar=%-3u line=%-3u\n", i, name, cmd->narg, cmd->npar, cmd->lno);
+        } else {
+            printf("%04u  UNKNOWN_CMD_%02X narg=%-3u npar=%-3u line=%-3u\n", i, cmd->code, cmd->narg, cmd->npar, cmd->lno);
+        }
+
+        static char hex[8192] = {0}; /// for print speedup
+        for (uint8_t arg_i = 0; arg_i < cmd->narg; ++arg_i) {
+            const struct yst_arg *arg = &cmd->args[arg_i];
+
+            char type_str[4] = "???";
+            switch (arg->type) {
+                case YST_ARG_INT: strcpy(type_str, "INT"); break;
+                case YST_ARG_FLT: strcpy(type_str, "FLT"); break;
+                case YST_ARG_STR: strcpy(type_str, "STR"); break;
+                case YST_ARG_VREF_UNK: strcpy(type_str, "VR?"); break;
+                case YST_ARG_VREF_INT: strcpy(type_str, "VRI"); break;
+                case YST_ARG_VREF_FLOAT: strcpy(type_str, "VRF"); break;
+                case YST_ARG_VREF_STR: strcpy(type_str, "VRS"); break;
+            }
+
+
+            char assign_str[3] = "=";
+            switch (arg->assign_type) {
+                case YST_ASSIGN_EQ: strcpy(assign_str, "="); break;
+                case YST_ASSIGN_ADD: strcpy(assign_str, "+="); break;
+                case YST_ASSIGN_SUB: strcpy(assign_str, "-="); break;
+                case YST_ASSIGN_MUL: strcpy(assign_str, "*="); break;
+                case YST_ASSIGN_DIV: strcpy(assign_str, "/="); break;
+                case YST_ASSIGN_MOD: strcpy(assign_str, "%="); break;
+                case YST_ASSIGN_AND: strcpy(assign_str, "&="); break;
+                case YST_ASSIGN_OR:  strcpy(assign_str, "|="); break;
+                case YST_ASSIGN_XOR: strcpy(assign_str, "^="); break;
+            };
+
+            size_t pos = 0;
+            size_t max_bytes = (sizeof(hex) - 4); // space for "..." 
+            for (uint32_t b = 0; b < arg->expr_len && pos < sizeof(hex) - 4; ++b)
+                pos += sprintf(hex + pos, "%02X ", arg->expr[b]);
+            if (arg->expr_len > max_bytes)
+                pos += sprintf(hex + pos, "...");
+
+            printf("      [%02u] %-2s %-2u %2s %s\n", arg->id, type_str, arg->expr_len, assign_str, hex); 
+        }
+
+        putchar('\n');
+    }
 }

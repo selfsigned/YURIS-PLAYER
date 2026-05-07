@@ -132,7 +132,7 @@ struct yuris_variables {
     struct ysv_variable **lookup; ///< lookup table by actual variable index
 };
 
-/// @param data ptr to the YSV data to parse
+/// @param data ptr to the YSV data to parse, free after use with free_ysv()
 /// @param size size of the YSV data
 /// @return 0 on success, negative ERRNO code on failure
 int parse_ysv(const uint8_t *data, size_t size, struct yuris_variables *out);
@@ -156,10 +156,70 @@ struct yuris_labels {
     } *labels;
 };
 
-/// @param data ptr to the YSL data to parse
+/// @param data ptr to the YSL data to parse, free after use with free_ysl()
 /// @param size size of the YSL data
 /// @return 0 on success, negative ERRNO code on failure
 int parse_ysl(const uint8_t *data, size_t size, struct yuris_labels *out);
 void free_ysl(struct yuris_labels *ysl);
+
+// YST (Script) //
+
+#define MAX_YST_ARGS 255 /// TODO could maybe be lowered
+
+enum yst_arg_type {
+    YST_ARG_INT = 1,
+    YST_ARG_FLT = 2,
+    YST_ARG_STR = 3,
+    YST_ARG_VREF_UNK = 4,   // base unknown + lvalue flag
+    YST_ARG_VREF_INT   = 5,   ///< base=INT + lvalue flag
+    YST_ARG_VREF_FLOAT = 6,   ///< base=FLOAT + lvalue flag
+    YST_ARG_VREF_STR   = 7,   ///< base=STR + lvalue flag
+    YST_ARG_MAX = 7,
+};
+
+enum yst_assign_type {
+    YST_ASSIGN_EQ, ///< =
+    YST_ASSIGN_ADD, ///< +=
+    YST_ASSIGN_SUB, ///< -=
+    YST_ASSIGN_MUL, ///< *=
+    YST_ASSIGN_DIV, ///< /=
+    YST_ASSIGN_MOD, ///< %=
+    YST_ASSIGN_AND, ///< &=
+    YST_ASSIGN_OR,  ///< |=
+    YST_ASSIGN_XOR, ///< ^=
+};
+
+struct yuris_script {
+    char magic[4]; ///< "YSTB"
+    uint32_t version;
+    uint32_t instruction_count;
+    uint32_t instruction_size; ///< instruction_count * 4 (Different in v255?)
+    uint32_t args_desc_size;
+    uint32_t args_vals_size;
+    uint32_t lines_size;
+
+    uint32_t _padding;
+
+    struct yst_command {
+        uint32_t lno; ///< line number in compiled file?
+        uint8_t code; ///< opcode
+        uint8_t narg; ///< argument count
+        uint16_t npar;  ///< GOSUB / RETURN parameter count
+
+        struct yst_arg {
+            uint16_t id;
+            enum yst_arg_type type;
+            enum yst_assign_type assign_type;
+            uint32_t expr_len;
+            uint8_t *expr; ///< STR will be CP932 encoded (sadly)
+        } args[MAX_YST_ARGS];
+    } *instructions;
+};
+
+/// @param data ptr to the script data to parse, free after use with free_yst()
+/// @param size size of the script data
+/// @return 0 on success, negative ERRNO code on failure
+int parse_yst(const uint8_t *data, size_t size, struct yuris_script *out);
+void free_yst(struct yuris_script *script);
 
 #endif

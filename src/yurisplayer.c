@@ -37,21 +37,26 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // Config / Argparse //
 
 struct config config = {
-    .debug = false
+    .debug = false,
+
+    #ifdef YURIS_DEBUG
+    .script_info_id = -42, // detect that it's not set
+    #endif
 };
 
 void show_help() {
     printf("Usage: yuris-player [options] <script.ypf OR game/pac>\n");
     printf("Options:\n");
-    printf("  -h, --help         Show this help message\n");
-    printf("  -t, --target PATH  Set the game target, either a script file or game asset directory (default: current directory)\n");
-    printf("  -d, --debug        Enable debug mode\n");
+    printf("  -h, --help           Show this help message\n");
+    printf("  -t, --target PATH    Set the game target, either a script file or game asset directory (default: current directory)\n");
+    printf("  -d, --debug          Enable debug mode\n");
     #ifdef YURIS_DEBUG
     printf("Debug Options:\n");
-    printf("      --symbols      Show symbol list from ysc.ybn to stdout and exit\n");
-    printf("      --script-list  Show the list of scripts from yst_list.ybn and exit\n");
-    printf("      --var-list     Show the list of variables from ysv.ybn and exit\n");
-    printf("      --label-list   Show the list of labels from ysl.ybn and exit\n"); 
+    printf("      --symbols        Show symbol list from ysc.ybn to stdout and exit\n");
+    printf("      --script-list    Show the list of scripts from yst_list.ybn and exit\n");
+    printf("      --var-list       Show the list of variables from ysv.ybn and exit\n");
+    printf("      --label-list     Show the list of labels from ysl.ybn and exit\n"); 
+    printf("      --script-info=ID Show commands inside a script, all scripts if ID omitted\n");
     #endif
 }
 
@@ -102,6 +107,18 @@ void parse_arguments(int argc, char *argv[]) {
                 config.show_var_list = true;
             } else if (strcmp(arg, "--label-list") == 0) {
                 config.show_label_list = true;
+            } else if (strncmp(arg, "--script-info", 13) == 0) {
+                config.script_info_id = -1; // default to all
+                if (arg[13] == '=') {
+                    char *id_str = arg + 14;
+                    char *endptr;
+                    long id = strtol(id_str, &endptr, 10);
+                    if (*endptr != '\0' || id < 0) {
+                        ERROR("Invalid script ID for --script-info: %s\n", id_str);
+                        exit(EXIT_FAILURE);
+                    }
+                    config.script_info_id = (int)id;
+                }
             #endif
 
             } else {
@@ -139,6 +156,11 @@ int main(int argc, char *argv[]) {
     if (config.debug) {
         SDL_LogSetAllPriority(SDL_LOG_PRIORITY_DEBUG);
     }
+
+    #ifdef YURIS_DEBUG
+    if (config.show_script_list || config.show_var_list || config.show_label_list || config.script_info_id >= -1)
+        setvbuf(stdout, NULL, _IOFBF, 64*1024);
+    #endif
 
     // default to current dir
     if (!config.game_target[0]) {
@@ -267,6 +289,42 @@ int main(int argc, char *argv[]) {
     #ifdef YURIS_DEBUG
     if (config.show_label_list) {
         debug_show_ysl_labels(&ysl, &ystl);
+        goto success;
+    }
+
+    if (config.script_info_id >= 0) {
+        char path[MAX_PATH_LEN] = {0};
+        snprintf(path, sizeof(path), "ysbin\\yst%05u.ybn", ystl.scripts[config.script_info_id].idx);
+
+        if (ystl.scripts[config.script_info_id].variable_count == UINT32_MAX) {
+            ERROR("Script '%s' does not have script data\n", ystl.scripts[config.script_info_id].path);
+            goto fail;
+        }
+
+        struct yuris_script script = {0};
+        if (load_script(&manager, path, &script, (int (*)(const uint8_t *, size_t, void *))parse_yst)) {
+            ERROR("Failed to load script '%s': %s\n", path, strerror(errno));
+            goto fail;
+        }
+        debug_show_yst(&script, &ystl.scripts[config.script_info_id], &ysc);
+        free_yst(&script);
+        goto success;
+    } else if (config.script_info_id == -1) {
+        /// TODO mapping here is wrong, ystl doesn't resolve to ybn like this
+        for (uint32_t i = 0; i < ystl.script_count; ++i) {
+            if (ystl.scripts[i].variable_count == UINT32_MAX) continue;
+
+            struct yuris_script script = {0};
+            char path[MAX_PATH_LEN] = {0};
+            snprintf(path, sizeof(path), "ysbin\\yst%05u.ybn", ystl.scripts[i].idx);
+
+            if (load_script(&manager, path, &script, (int (*)(const uint8_t *, size_t, void *))parse_yst)) {
+                ERROR("Failed to load script '%s': %s\n", path, strerror(errno));
+                continue;
+            }
+            debug_show_yst(&script, &ystl.scripts[i], &ysc);
+            free_yst(&script);
+        }
         goto success;
     }
     #endif

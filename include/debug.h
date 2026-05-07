@@ -40,4 +40,11 @@ void debug_show_ysv_variable(const struct ysv_variable *var, const struct yuris_
 void debug_show_ysl_labels(const struct yuris_labels *ysl, const struct yuris_script_list *ystl);
 void debug_show_ysl_label(const struct ysl_label *label, const struct yuris_script_list *ystl);
 
+/// @brief show info about a script
+/// @param script the script to show info about
+/// @param script_info the script's info from yst_list.ybn, used to show path
+/// @param ysv used to show variable info
+void debug_show_yst(const struct yuris_script *script, const struct ystl_script *info, const struct yuris_commands *ysc);
+
+
 #endif 
