@@ -19,7 +19,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef DEBUG_H
 #define DEBUG_H
 
+#include "archive.h"
 #include "script_reader.h"
+
+/// @brief show all virtual files in the loaded archives and exit
+void debug_show_files(const archiveManager *manager);
 
 /// @brief show ysc command w/ args and signatures
 void debug_show_ysc_command(const struct ysc_command *cmd);

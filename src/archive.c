@@ -128,7 +128,6 @@ int archive_load(archiveManager *manager, const char *path, archiveEntry **out_a
         fileEntry *e = &entry.files[i];
 
         memcpy(&e->f, mf, sizeof(YurisFile));
-        DEBUG("File %03zu: %s (offset: %lu, size: %u)\n", i, e->f.name, (unsigned long)e->f.offset, e->f.stored_size);
     }
     manager->archives[manager->count] = entry;
     archiveEntry *archive = &manager->archives[manager->count]; // set back ptr to parent archive

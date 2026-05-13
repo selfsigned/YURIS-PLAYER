@@ -20,6 +20,35 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <string.h>
 #include <stdio.h>
 
+void debug_show_files(const archiveManager *manager) {
+    if (!manager) return;
+
+    for (size_t i = 0; i < manager->count; ++i) {
+        const archiveEntry *entry = &manager->archives[i];
+
+        char type_str[8] = {0};
+        switch (entry->type) {
+            case ASSET: strcpy(type_str, "ASSET"); break;
+            case SCRIPT: strcpy(type_str, "SCRIPT"); break;
+            case MPEG: strcpy(type_str, "MPEG"); break;
+            default: strcpy(type_str, "UNKNOWN"); break;
+        }
+
+        printf("%s [v%u 0x%08X %s] %zu files\n",
+               entry->path, entry->version.version, entry->version.xor_key,
+               type_str, entry->count);
+        printf("%-5s %-50s %s %13s %12s %6s %5s\n", "#", "Path", "Offset", "Stored", "Unpacked", "Zlib", "Hash");
+        for (size_t j = 0; j < entry->count; ++j) {
+            const YurisFile *file = &entry->files[j].f;
+
+            printf("%04zu  %-50s %-#12llx  %-10u %-10u  %-3s  %-#10x\n",
+                j, file->name, (unsigned long long)file->offset,
+                file->stored_size, file->unpacked_size,
+                file->compressed ? "yes" : "no", file->hash);
+        }
+    }
+}
+
 void debug_show_ysc_command(const struct ysc_command *cmd) {
     if (!cmd) return;
     if (cmd->arg_count == 0) printf("%s\n", cmd->name);
@@ -176,11 +205,15 @@ void debug_show_yst(const struct yuris_script *script, const struct ystl_script 
             };
 
             size_t pos = 0;
-            size_t max_bytes = (sizeof(hex) - 4); // space for "..." 
-            for (uint32_t b = 0; b < arg->expr_len && pos < sizeof(hex) - 4; ++b)
-                pos += sprintf(hex + pos, "%02X ", arg->expr[b]);
-            if (arg->expr_len > max_bytes)
-                pos += sprintf(hex + pos, "...");
+            if (arg->expr) {
+                size_t max_bytes = (sizeof(hex) - 4); // space for "..."
+                for (uint32_t b = 0; b < arg->expr_len && pos < sizeof(hex) - 4; ++b)
+                    pos += sprintf(hex + pos, "%02X ", arg->expr[b]);
+                if (arg->expr_len > max_bytes)
+                    pos += sprintf(hex + pos, "...");
+            } else if (arg->expr_len > 0) {
+                pos += sprintf(hex + pos, "(null)");
+            }
 
             printf("      [%02u] %-2s %-2u %2s %s\n", arg->id, type_str, arg->expr_len, assign_str, hex); 
         }

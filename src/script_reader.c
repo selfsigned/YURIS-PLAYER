@@ -122,6 +122,8 @@ static inline void xor_data(uint8_t *data, size_t len, uint32_t key) {
         data[i] ^= k[i & 3];
 }
 
+static uint32_t cached_ystb_key = 0;
+
 static uint32_t guess_ystb_key(const uint8_t *data, size_t size) {
     if (size < 32) return 0;
 
@@ -134,7 +136,7 @@ static uint32_t guess_ystb_key(const uint8_t *data, size_t size) {
         if (size < 0x30) return 0;
 
         size_t key_off = 0x2C;
-        // stored in BE
+        // stored in BE (might need change)
         return (uint32_t)data[key_off] << 24 |
                (uint32_t)data[key_off + 1] << 16 |
                (uint32_t)data[key_off + 2] << 8 |
@@ -144,6 +146,11 @@ static uint32_t guess_ystb_key(const uint8_t *data, size_t size) {
     offset = 12; // magic(4) + version(4) + instr_count(4)
     uint32_t instruction_size;
     if (!read_u32(data, &offset, size, &instruction_size)) return 0;
+
+    uint32_t args_desc_size;
+    if (!read_u32(data, &offset, size, &args_desc_size)) return 0;
+
+    if (args_desc_size < 12) return 0; // fall back to cached
 
     size_t key_off = 32 + instruction_size + 8;
     if (key_off + 4 > size) return 0;
@@ -416,11 +423,18 @@ int parse_yst(const uint8_t *data, size_t size, struct yuris_script *out) {
     if (!read_u32(data, &offset, size, &out->lines_size)) goto fail_readsize;
     if (!read_u32(data, &offset, size, &out->_padding)) goto fail_readsize;
 
+    if (offset + out->instruction_size + out->args_desc_size + out->args_vals_size + out->lines_size > size)
+        goto fail_readsize;
+
     uint32_t xor_key = guess_ystb_key(data, size);
     if (!xor_key) {
-        ERROR("Failed to guess YST XOR key\n");
-        return -EINVAL;
-    }
+        if (cached_ystb_key) {
+            xor_key = cached_ystb_key;
+        } else {
+            ERROR("Failed to guess YST XOR key and no cached fallback available\n");
+            return -EINVAL;
+        }
+    } else cached_ystb_key = xor_key;
     DEBUG("YST XOR key: 0x%08X\n", xor_key);
 
     uint8_t *decrypted_cmd = malloc(out->instruction_size);
@@ -474,7 +488,7 @@ int parse_yst(const uint8_t *data, size_t size, struct yuris_script *out) {
             uint32_t expr_offset;
             if (!read_u32(decrypted_args, &arg_offset, out->args_desc_size, &expr_offset)) goto fail_readsize_decrypt;
 
-            if (arg->expr_len > 0) {
+            if (arg->expr_len > 0 && expr_offset + arg->expr_len <= out->args_vals_size) {
                 arg->expr = malloc(arg->expr_len);
                 if (!arg->expr) goto fail_alloc;
                 memcpy(arg->expr, decrypted_vals + expr_offset, arg->expr_len);

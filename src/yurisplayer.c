@@ -52,6 +52,7 @@ void show_help() {
     printf("  -d, --debug          Enable debug mode\n");
     #ifdef YURIS_DEBUG
     printf("Debug Options:\n");
+    printf("      --files          Show all virtual files in the loaded archives and exit\n");
     printf("      --symbols        Show symbol list from ysc.ybn to stdout and exit\n");
     printf("      --script-list    Show the list of scripts from yst_list.ybn and exit\n");
     printf("      --var-list       Show the list of variables from ysv.ybn and exit\n");
@@ -99,6 +100,8 @@ void parse_arguments(int argc, char *argv[]) {
                 config.debug = true;
 
             #ifdef YURIS_DEBUG
+            } else if (strcmp(arg, "--files") == 0) {
+                config.show_files = true;
             } else if (strcmp(arg, "--symbols") == 0) {
                 config.show_symbols = true;
             } else if (strcmp(arg, "--script-list") == 0) {
@@ -153,14 +156,17 @@ int main(int argc, char *argv[]) {
     YurisVersion *yuris_version = NULL;
 
     parse_arguments(argc, argv);
-    if (config.debug) {
+    if (config.debug)
         SDL_LogSetAllPriority(SDL_LOG_PRIORITY_DEBUG);
-    }
 
     #ifdef YURIS_DEBUG
-    if (config.show_script_list || config.show_var_list || config.show_label_list || config.script_info_id >= -1)
-        setvbuf(stdout, NULL, _IOFBF, 64*1024);
-    #endif
+    if (config.show_files ||
+        config.show_script_list ||
+        config.show_var_list ||
+        config.show_label_list ||
+        config.script_info_id >= -1)
+        setvbuf(stdout, NULL, _IOFBF, 64 * 1024);
+#endif
 
     // default to current dir
     if (!config.game_target[0]) {
@@ -230,6 +236,14 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
     INFO("Detected YU-RIS Version: %u XOR key: 0x%08X instruction len: %u\n", yuris_version->version, yuris_version->xor_key, yuris_version->instr_len);
+
+    #ifdef YURIS_DEBUG
+    if (config.show_files) {
+        debug_show_files(&manager);
+        archive_manager_free(&manager);
+        return EXIT_SUCCESS;
+    }
+    #endif
 
     struct yuris_commands ysc = {0};
     struct yuris_script_list ystl = {0};

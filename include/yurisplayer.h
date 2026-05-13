@@ -30,6 +30,7 @@ struct config {
     bool debug;
 
     #ifdef YURIS_DEBUG
+    bool show_files;
     bool show_symbols;
     bool show_script_list;
     bool show_var_list;
