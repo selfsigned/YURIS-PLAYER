@@ -243,7 +243,8 @@ int parse_ystl(const uint8_t *data, size_t size, struct yuris_script_list *out) 
         if (!read_u64(data, &offset, size, &script->_modification_time)) goto fail_readsize;
         if (!read_u32(data, &offset, size, &script->variable_count)) goto fail_readsize;
         if (!read_u32(data, &offset, size, &script->label_count)) goto fail_readsize;
-        if (!read_u32(data, &offset, size, &script->text_count)) goto fail_readsize;
+        if (out->version > 300)
+            if (!read_u32(data, &offset, size, &script->text_count)) goto fail_readsize;
     }
 
     return 0;
