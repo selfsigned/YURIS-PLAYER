@@ -36,6 +36,7 @@ struct config {
     bool show_var_list;
     bool show_label_list;
     int script_info_id; ///< -1 for all
+    char *expr; ///< "" for REPL mode, "XX XX XX ..." for expr eval
     #endif
 };
 extern struct config config;

@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "archive.h"
 #include "script_reader.h"
+#include "expr.h"
 
 /// @brief show all virtual files in the loaded archives and exit
 void debug_show_files(const archiveManager *manager);
@@ -49,6 +50,12 @@ void debug_show_ysl_label(const struct ysl_label *label, const struct yuris_scri
 /// @param script_info the script's info from yst_list.ybn, used to show path
 /// @param ysv used to show variable info
 void debug_show_yst(const struct yuris_script *script, const struct ystl_script *info, const struct yuris_commands *ysc);
+
+/// @brief evaluate an expression in debug mode, returns 0 on success, -1 on failure (invalid expression, etc)
+/// @param expr_str hex expression string, e.g "42 01 00 01" (pushi8 1)
+int debug_expr_eval(char *expr_str);
+/// @brief interactive REPL to evaluate expressions, "exit" to quit
+int debug_expr_repl(void);
 
 
 #endif 

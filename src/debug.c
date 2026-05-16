@@ -221,3 +221,77 @@ void debug_show_yst(const struct yuris_script *script, const struct ystl_script 
         putchar('\n');
     }
 }
+
+int debug_expr_eval(char *expr_str) {
+    if (!expr_str) return -1;
+
+    uint8_t expr_data[8192];
+    size_t expr_len = 0;
+
+    for (size_t i = 0; i < sizeof(expr_data) && *expr_str; ++i) {
+        while (*expr_str == ' ')
+            expr_str++;
+        if (*expr_str == '\0')
+            break;
+
+        char *endptr;
+        unsigned long byte = strtoul(expr_str, &endptr, 16);
+        if (endptr == expr_str || byte > 0xFF) {
+            ERROR("Invalid byte in expression: %s\n", expr_str);
+            return -1;
+        }
+        expr_data[i] = (uint8_t)byte;
+        expr_len++;
+
+        expr_str = endptr;
+    }
+
+    struct expr_value vm_value;
+    size_t result = vm_eval_expr(expr_data, expr_len, &vm_value);
+    if (result != 0) {
+        ERROR("Expression evaluation failed\n");
+        return result;
+    }
+
+    switch (vm_value.type) {
+        case EXPR_INT:
+            printf("INT %ld", vm_value.value.i);
+            break;
+        case EXPR_FLOAT:
+            printf("FLT %f", vm_value.value.f);
+            break;
+        case EXPR_STR:
+            printf("STR(%u) %s", vm_value.value.s.len, vm_value.value.s.ptr);
+            if (vm_value.value.s.ptr)
+                free(vm_value.value.s.ptr);
+            break;
+        default:
+            printf("UNKNOWN");
+            break;
+    }
+
+    return 0;
+}
+
+int debug_expr_repl(void) {
+    printf("Enter expression in hex (e.g '42 01 00 01') or 'exit' to quit\n");
+    while (true) {
+        char input[2048];
+        printf(">>> ");
+        if (!fgets(input, sizeof(input), stdin)) {
+            printf("\n");
+            break;
+        }
+
+        size_t len = strlen(input);
+        if (len > 0 && input[len - 1] == '\n')
+            input[len - 1] = '\0';
+
+        if (strcmp(input, "exit") == 0)
+            break;
+
+        int result = debug_expr_eval(input);
+        if (!result) putchar('\n');
+    }
+    return 0;
+}

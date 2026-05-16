@@ -14,6 +14,8 @@ if not iconv_dep.found()
     iconv_dep = cc.find_library('iconv', required: true)
   endif
 endif
+m_dep = cc.find_library('m', required: false)
+
 
 libyuris_dir = meson.current_source_dir() / 'libyuris/target/release'
 libyuris_path = libyuris_dir / 'libyuris_decomp.so'
@@ -43,9 +45,11 @@ inc = include_directories('include')
 src_files = files(
   'src/yurisplayer.c',
   'src/archive.c',
-  'src/debug.c',
   'src/script_reader.c',
-  'src/encoding.c'
+  'src/utils.c',
+  'src/encoding.c',
+  'src/expr.c',
+  'src/debug.c'
 )
 
 if get_option('buildtype') in ['debug', 'debugoptimized']
@@ -55,5 +59,5 @@ endif
 executable('yuris-player',
   src_files,
   include_directories: inc,
-  dependencies: [libyuris_dep, sdl2_dep, iconv_dep],
+  dependencies: [libyuris_dep, sdl2_dep, iconv_dep, m_dep],
 )

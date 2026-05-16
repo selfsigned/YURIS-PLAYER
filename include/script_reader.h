@@ -24,7 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // YSC //
 
 #define MAX_YSC_COMMANDS 255
-#define MAX_YSC_FUNCNAME_LEN 32
+#define MAX_YSC_FUNCNAME_LEN 64
 #define MAX_YSC_ARGS 128
 #define MAX_YSC_ERRMSG 128
 #define YSC_ERR_STR_COUNT 37

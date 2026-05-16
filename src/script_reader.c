@@ -27,90 +27,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // helpers //
 
-static inline bool read_u8(const uint8_t *data, size_t *offset, size_t max, uint8_t *out) {
-    if (!data || !offset || !out) return false;
-    if (*offset >= max) return false;
-
-    *out = data[*offset];
-    *offset += 1;
-    return true;
-}
-
-static inline bool read_u16(const uint8_t *data, size_t *offset, size_t max, uint16_t *out) {
-    if (!data || !offset || !out) return false;
-    if (*offset + 2 > max) return false;
-
-    uint16_t v = (uint16_t)data[*offset] |
-                 (uint16_t)data[*offset + 1] << 8;
-    *offset += 2;
-    *out = v;
-    return true;
-}
-
-static inline bool read_u32(const uint8_t *data, size_t *offset, size_t max, uint32_t *out) {
-    if (!data || !offset || !out) return false;
-    if (*offset + 4 > max) return false;
-
-    uint32_t v = (uint32_t)data[*offset] |
-                 (uint32_t)data[*offset + 1] << 8 |
-                 (uint32_t)data[*offset + 2] << 16 |
-                 (uint32_t)data[*offset + 3] << 24;
-    *offset += 4;
-    *out = v;
-    return true;
-}
-
-static inline bool read_u64(const uint8_t *data, size_t *offset, size_t max, uint64_t *out) {
-    if (!data || !offset || !out) return false;
-    if (*offset + 8 > max) return false;
-
-    uint32_t lo, hi;
-    if (!read_u32(data, offset, max, (uint32_t *)&lo)) return false;
-    if (!read_u32(data, offset, max, (uint32_t *)&hi)) return false;
-    *out = ((uint64_t)hi) << 32 | (uint64_t)lo;
-    return true;
-}
-
-/// @brief read null terminated strings safely
-/// @param offset external cursor in data buffer
-/// @param max maximum offset to read from *data
-static inline bool read_str(const uint8_t *data, size_t *offset, size_t max, char *out, size_t *out_len, size_t max_len) {
-    if (!data || !offset || !out || max_len == 0) return false;
-    if (*offset >= max) return false;
-
-    size_t off = *offset;
-    const uint8_t *end = memchr(data + off, '\0', max - off);
-    if (!end) return false;
-
-    size_t len = end - (data + off);
-    size_t to_copy = (len < max_len - 1) ? len : (max_len - 1);
-    memcpy(out, data + off, to_copy);
-    out[to_copy] = '\0';
-
-    *offset = off + len + 1;
-    if (out_len) *out_len = len;
-    return true;
-}
-
-/// @brief read fixed length chars and add a null terminator (not null terminated in input).
-/// @param out should be at least field_len + 1 (for NULL terminator)
-/// @param field_len exact length of the field in the input data
-/// @return true if the field was fully read and output was null terminated.
-static inline bool read_char_fixed(const uint8_t *data, size_t *offset, size_t max,
-                                   char *out, size_t *out_len, size_t field_len)
-{
-    if (!data || !offset || !out || field_len == 0) return false;
-    if (*offset >= max) return false;
-    if (*offset + field_len > max) return false;
-
-    memcpy(out, data + *offset, field_len);
-    out[field_len] = '\0';
-
-    *offset += field_len;
-    if (out_len) *out_len = field_len;
-    return true;
-}
-
 static inline void xor_data(uint8_t *data, size_t len, uint32_t key) {
     uint8_t k[4] = {
         (key >> 24) & 0xFF, // big-endian swap
@@ -231,7 +147,7 @@ int parse_ystl(const uint8_t *data, size_t size, struct yuris_script_list *out) 
 
         size_t path_read;
         char sjis_path[YSTL_MAX_PATH_LEN];
-        if (!read_char_fixed(data, &offset, size, sjis_path, &path_read, script->path_length)) goto fail_readsize;
+        if (!read_fixed(data, &offset, size, sjis_path, &path_read, script->path_length)) goto fail_readsize;
         if (path_read != script->path_length) goto fail_invalid;
 
         char *utf8_path = cp932_str_to_utf8(sjis_path);
@@ -373,7 +289,7 @@ int parse_ysl(const uint8_t *data, size_t size, struct yuris_labels *out) {
         if (!read_u8(data, &offset, size, &len)) goto fail_readsize;
         char *sjis_name = malloc(len + 1);
         if (!sjis_name) goto fail_alloc ;
-        if (!read_char_fixed(data, &offset, size, sjis_name, &name_read, len) || name_read != len) {
+        if (!read_fixed(data, &offset, size, sjis_name, &name_read, len) || name_read != len) {
             free(sjis_name);
             goto fail_readsize;
         }

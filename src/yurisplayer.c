@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "libyuris.h"
 #include "archive.h"
 #include "script_reader.h"
+#include "expr.h"
 
 #ifdef YURIS_DEBUG
 #include "debug.h"
@@ -58,6 +59,8 @@ void show_help() {
     printf("      --var-list       Show the list of variables from ysv.ybn and exit\n");
     printf("      --label-list     Show the list of labels from ysl.ybn and exit\n"); 
     printf("      --script-info=ID Show commands inside a script, all scripts if ID omitted\n");
+    printf("      --expr=EXPR      Evaluate a list of hex bytes expression and print the result e.g --expr='42 01 00 01'\n");
+    printf("      --expr           Start a REPL to evaluate expressions interactively\n");
     #endif
 }
 
@@ -110,6 +113,10 @@ void parse_arguments(int argc, char *argv[]) {
                 config.show_var_list = true;
             } else if (strcmp(arg, "--label-list") == 0) {
                 config.show_label_list = true;
+            } else if (strncmp(arg, "--expr", 6) == 0) {
+                config.expr = "";
+                if (arg[6] == '=')
+                    config.expr = arg + 7;
             } else if (strncmp(arg, "--script-info", 13) == 0) {
                 config.script_info_id = -1; // default to all
                 if (arg[13] == '=') {
@@ -306,6 +313,25 @@ int main(int argc, char *argv[]) {
         goto success;
     }
 
+    if (config.expr) {
+        if (strlen(config.expr) == 0) {
+            int result = debug_expr_repl();
+            if (result != 0) {
+                ERROR("Expression REPL exited with error code %d\n", result);
+                goto fail;
+            }
+            goto success;
+        } else if (strlen(config.expr) > 0) {
+            int result = debug_expr_eval(config.expr);
+            if (result != 0) {
+                ERROR("Expression evaluation failed for '%s'\n", config.expr);
+                goto fail;
+            }
+            putchar('\n');
+            goto success;
+        }
+    }
+
     if (config.script_info_id >= 0) {
         char path[MAX_PATH_LEN] = {0};
         snprintf(path, sizeof(path), "ysbin\\yst%05u.ybn", ystl.scripts[config.script_info_id].idx);
@@ -342,7 +368,6 @@ int main(int argc, char *argv[]) {
         goto success;
     }
     #endif
-
 
     success:
         archive_manager_free(&manager);
