@@ -274,10 +274,41 @@ int vm_eval_expr(const uint8_t *expr, const size_t len, struct expr_value *out) 
                 memcpy(str, expr + offset, arg_len);
                 str[arg_len] = '\0';
 
+                size_t data_len = arg_len;
+                char *utf8_str = str;
+                char q = utf8_str[0];
+                if (data_len >= 2 && (q == '"' || q == '\'') && utf8_str[data_len - 1] == q) {
+                    utf8_str[data_len - 1] = '\0';
+                    utf8_str++;
+                    data_len -= 2;
+                }
+                if (data_len == 0) {
+                    char *empty_str = strdup("");
+                    if (!empty_str) goto fail_alloc;
+                    free(str);
+                    offset += arg_len;
+                    PUSH(STR_V(empty_str, 0));
+                    break;
+                }
+
                 size_t out_len = 0;
-                char *utf8_str = cp932_to_utf8(str, arg_len, &out_len);
+                utf8_str = cp932_to_utf8(utf8_str, data_len, &out_len);
                 free(str);
                 if (!utf8_str || out_len == 0) goto fail_encode;
+
+                for (size_t i = 0; i < out_len; ++i) {
+                    if (utf8_str[i] == '\\' && i + 1 < out_len) {
+                        char code = utf8_str[i + 1];
+                        switch (code) {
+                            case '\\': utf8_str[i] = '\\'; break;
+                            case 'n': utf8_str[i] = '\n'; break;
+                            case 't': utf8_str[i] = '\t'; break;
+                            default: continue;
+                        }
+                        memmove(&utf8_str[i + 1], &utf8_str[i + 2], out_len - (i + 1));
+                        out_len--;
+                    }
+                }
 
                 offset += arg_len;
                 PUSH(STR_V(utf8_str, out_len));

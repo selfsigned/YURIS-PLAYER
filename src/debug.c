@@ -215,7 +215,30 @@ void debug_show_yst(const struct yuris_script *script, const struct ystl_script 
                 pos += sprintf(hex + pos, "(null)");
             }
 
+            struct expr_value vm_result;
+            int ret = vm_eval_expr(arg->expr, arg->expr_len, &vm_result);
+
             printf("      [%02u] %-2s %-2u %2s %s\n", arg->id, type_str, arg->expr_len, assign_str, hex); 
+            if (ret == 0) {
+                printf("           -> ");
+                switch (vm_result.type) {
+                    case EXPR_INT:
+                        printf("INT %ld", vm_result.value.i);
+                        break;
+                    case EXPR_FLOAT:
+                        printf("FLT %f", vm_result.value.f);
+                        break;
+                    case EXPR_STR:
+                        printf("STR(%u) %s", vm_result.value.s.len, vm_result.value.s.ptr);
+                        if (vm_result.value.s.ptr)
+                            free(vm_result.value.s.ptr);
+                        break;
+                    default:
+                        printf("UNKNOWN");
+                        break;
+                }
+                putchar('\n');
+            }
         }
 
         putchar('\n');
@@ -249,7 +272,6 @@ int debug_expr_eval(char *expr_str) {
     struct expr_value vm_value;
     size_t result = vm_eval_expr(expr_data, expr_len, &vm_value);
     if (result != 0) {
-        ERROR("Expression evaluation failed\n");
         return result;
     }
 

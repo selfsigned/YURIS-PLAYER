@@ -350,7 +350,6 @@ int main(int argc, char *argv[]) {
         free_yst(&script);
         goto success;
     } else if (config.script_info_id == -1) {
-        /// TODO mapping here is wrong, ystl doesn't resolve to ybn like this
         for (uint32_t i = 0; i < ystl.script_count; ++i) {
             if (ystl.scripts[i].variable_count == UINT32_MAX) continue;
 
