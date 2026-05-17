@@ -22,11 +22,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 /// @brief re-implementation of the stack-based expression VM
 /// The first byte is the Opcode, followed by a 16 bit argument length
 
+#include <stdlib.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #define EXPR_STACK_SIZE 256
 #define NUMBER_STR_BUF_SIZE 64
+
+// Helpers to create new expr vals without syntax bloat
+#define INT_V(v) ((struct expr_value){.type = EXPR_INT, .value.i = (v)})
+#define FLT_V(v) ((struct expr_value){.type = EXPR_FLOAT, .value.f = (v)})
+#define STR_V(p,l) ((struct expr_value){.type = EXPR_STR, .value.s = {.ptr = (p), .len = (l)}})
+#define FREE_EXPR(v) do { \
+    if ((v).type == EXPR_STR) { \
+        if ((v).value.s.ptr) \
+            free((v).value.s.ptr); \
+        (v).value.s.ptr = NULL; \
+        (v).value.s.len = 0; \
+    } \
+} while (0)
 
 enum expr_opcode {
     OP_PUSH_I8          = 0x42,
@@ -85,6 +99,6 @@ struct expr_value {
     } value;
 };
 
-int vm_eval_expr(const uint8_t *expr, const size_t len, struct expr_value *out);
+int eval_expr(const uint8_t *expr, const size_t len, struct expr_value *out);
 
 #endif 

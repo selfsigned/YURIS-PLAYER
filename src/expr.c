@@ -33,18 +33,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
     (v) = stack[--sp]; \
 } while (0)
 
-#define FREE_EXPR(v) do { \
-    if ((v).type == EXPR_STR) { \
-        if ((v).value.s.ptr) \
-            free((v).value.s.ptr); \
-        (v).value.s.ptr = NULL; \
-        (v).value.s.len = 0; \
-    } \
-} while (0)
-
-#define INT_V(v) ((struct expr_value){.type = EXPR_INT, .value.i = (v)})
-#define FLT_V(v) ((struct expr_value){.type = EXPR_FLOAT, .value.f = (v)})
-#define STR_V(p,l) ((struct expr_value){.type = EXPR_STR, .value.s = {.ptr = (p), .len = (l)}})
 
 
 // Types //
@@ -222,7 +210,7 @@ static struct expr_value(*const op_table[])(struct expr_value, struct expr_value
 
 // expr eval //
 
-int vm_eval_expr(const uint8_t *expr, const size_t len, struct expr_value *out) {
+int eval_expr(const uint8_t *expr, const size_t len, struct expr_value *out) {
     if (!expr || !out) return -EINVAL;
     size_t ret = 0;
 

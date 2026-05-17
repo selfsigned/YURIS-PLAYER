@@ -30,6 +30,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "archive.h"
 #include "script_reader.h"
 #include "expr.h"
+#include "vm.h"
 
 #ifdef YURIS_DEBUG
 #include "debug.h"
@@ -160,7 +161,7 @@ int load_script(archiveManager *manager, const char *vpath, void *out, int (*cal
 int main(int argc, char *argv[]) {
     archiveManager manager = {0};
     archiveEntry *archive = NULL;
-    YurisVersion *yuris_version = NULL;
+    yuris_vm vm = {0};
 
     parse_arguments(argc, argv);
     if (config.debug)
@@ -209,12 +210,12 @@ int main(int argc, char *argv[]) {
                 int result = archive_load(&manager, path, &archive);
                 if (result == 0) {
                     INFO("Loaded archive: %s\n", path);
-                    if (!yuris_version) {
-                        yuris_version = &archive->version;
-                    } else if (archive->version.version != yuris_version->version) {
-                        WARN("Version mismatch: %s has version %u, expected %u\n", path, archive->version.version, yuris_version->version);
+                    if (!vm.version) {
+                        vm.version = &archive->version;
+                    } else if (archive->version.version != vm.version->version) {
+                        WARN("Version mismatch: %s has version %u, expected %u\n", path, archive->version.version, vm.version->version);
                         if (archive->type == SCRIPT) {
-                            yuris_version = &archive->version;
+                            vm.version = &archive->version;
                         }
                     }
                 } else if (result == 1) {
@@ -228,7 +229,7 @@ int main(int argc, char *argv[]) {
         int result = archive_load(&manager, config.game_target, &archive); // load archive directly, useful for testing
         if (result == 0) {
             INFO("Loaded archive: %s\n", config.game_target);
-            yuris_version = &archive->version;
+            vm.version = &archive->version;
         } else if (result == 1) {
             ERROR("Archive not found: %s\n", config.game_target);
             return EXIT_FAILURE;
@@ -238,11 +239,11 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (!yuris_version) {
+    if (!vm.version) {
         ERROR("No valid archives loaded, exiting\n");
         return EXIT_FAILURE;
     }
-    INFO("Detected YU-RIS Version: %u XOR key: 0x%08X instruction len: %u\n", yuris_version->version, yuris_version->xor_key, yuris_version->instr_len);
+    INFO("Detected YU-RIS Version: %u XOR key: 0x%08X instruction len: %u\n", vm.version->version, vm.version->xor_key, vm.version->instr_len);
 
     #ifdef YURIS_DEBUG
     if (config.show_files) {
@@ -263,6 +264,7 @@ int main(int argc, char *argv[]) {
         goto fail;
     }
     INFO("YSC.bin (v%u) contains %u commands\n", ysc.version, ysc.command_count);
+    vm.ysc = &ysc;
 
     #ifdef YURIS_DEBUG
     if (config.show_symbols) {
@@ -277,6 +279,7 @@ int main(int argc, char *argv[]) {
         goto fail;
     }
     INFO("YSTL.bin (v%u) contains %u scripts\n", ystl.version, ystl.script_count);
+    vm.ystl = &ystl;
 
     #ifdef YURIS_DEBUG
     if (config.show_script_list) {
@@ -291,6 +294,7 @@ int main(int argc, char *argv[]) {
         goto fail;
     }
     INFO("YSV.bin (v%u) contains %u variables\n", ysv.version, ysv.variable_count);
+    vm.ysv = &ysv;
 
     #ifdef YURIS_DEBUG
     if (config.show_var_list) {
@@ -306,13 +310,25 @@ int main(int argc, char *argv[]) {
         goto fail;
     }
     INFO("YSL.bin (v%u) contains %u labels\n", ysl.version, ysl.label_count);
+    vm.ysl = &ysl;
 
     #ifdef YURIS_DEBUG
     if (config.show_label_list) {
         debug_show_ysl_labels(&ysl, &ystl);
         goto success;
     }
+    #endif
 
+
+    // Init VM state after definition loading
+    if (vm_init_vars(&vm)) {
+        ERROR("Failed to initialize VM variables: %s\n", strerror(-errno));
+        goto fail;
+    }
+    INFO("VM loaded variables max index: %u\n", vm.vars.max_idx);
+
+
+    #ifdef YURIS_DEBUG
     if (config.expr) {
         if (strlen(config.expr) == 0) {
             int result = debug_expr_repl();
@@ -370,13 +386,11 @@ int main(int argc, char *argv[]) {
 
     success:
         archive_manager_free(&manager);
-        free_ysv(&ysv);
-        free_ysl(&ysl);
+        free_vm(&vm);
         return 0;
 
     fail:
         archive_manager_free(&manager);
-        free_ysv(&ysv);
-        free_ysl(&ysl);
+        free_vm(&vm);
         exit(EXIT_FAILURE);
 }

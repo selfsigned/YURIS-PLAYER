@@ -129,6 +129,8 @@ struct yuris_variables {
         } initial_value;
     } *variables;
 
+    // additions
+    uint16_t max_variable_idx; ///< for sizing
     struct ysv_variable **lookup; ///< lookup table by actual variable index
 };
 

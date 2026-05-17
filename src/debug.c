@@ -216,7 +216,7 @@ void debug_show_yst(const struct yuris_script *script, const struct ystl_script 
             }
 
             struct expr_value vm_result;
-            int ret = vm_eval_expr(arg->expr, arg->expr_len, &vm_result);
+            int ret = eval_expr(arg->expr, arg->expr_len, &vm_result);
 
             printf("      [%02u] %-2s %-2u %2s %s\n", arg->id, type_str, arg->expr_len, assign_str, hex); 
             if (ret == 0) {
@@ -270,7 +270,7 @@ int debug_expr_eval(char *expr_str) {
     }
 
     struct expr_value vm_value;
-    size_t result = vm_eval_expr(expr_data, expr_len, &vm_value);
+    size_t result = eval_expr(expr_data, expr_len, &vm_value);
     if (result != 0) {
         return result;
     }

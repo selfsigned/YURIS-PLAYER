@@ -226,11 +226,13 @@ int parse_ysv(const uint8_t *data, size_t size, struct yuris_variables *out) {
                 goto fail_invalid;
         }
 
-        if (var->variable_idx > max_var_idx) max_var_idx = var->variable_idx;
+        if (var->variable_idx > max_var_idx)
+            max_var_idx = var->variable_idx;
     }
 
-
+    out->max_variable_idx = max_var_idx;
     out->lookup = calloc(max_var_idx + 1, sizeof(struct ysv_variable *));
+    if (!out->lookup) goto fail_alloc;
     for (uint16_t i = 0; i < out->variable_count; ++i) {
         struct ysv_variable *var = &out->variables[i];
         if (var->variable_idx <= max_var_idx)
@@ -319,6 +321,7 @@ int parse_ysl(const uint8_t *data, size_t size, struct yuris_labels *out) {
 
 void free_ysl(struct yuris_labels *ysl) {
     if (!ysl) return;
+    if (!ysl->labels) return;
     for (uint32_t i = 0; i < ysl->label_count; ++i) {
         free(ysl->labels[i].name);
         ysl->labels[i].name = NULL;
@@ -412,7 +415,6 @@ int parse_yst(const uint8_t *data, size_t size, struct yuris_script *out) {
             }
         }
     }
-
 
     free(decrypted_cmd);
     free(decrypted_args);
